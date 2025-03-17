@@ -98,7 +98,7 @@ def motor_right(status, direction, speed):#Motor 1 positive and negative rotatio
 
 def move(speed, direction, turn, radius=0.6):   # 0 < radius <= 1  
 	#speed = 100
-	right_speed = speed * 0.7 # right crawler faster than left one
+	right_speed = speed * 0.85 # right crawler faster than left one
 	if direction == 'forward':
 		if turn == 'right':
 			motor_left(0, left_forward, int(speed*radius))
