@@ -98,33 +98,34 @@ def motor_right(status, direction, speed):#Motor 1 positive and negative rotatio
 
 def move(speed, direction, turn, radius=0.6):   # 0 < radius <= 1  
 	#speed = 100
+	right_speed = speed * 0.7 # right crawler faster than left one
 	if direction == 'forward':
 		if turn == 'right':
 			motor_left(0, left_forward, int(speed*radius))
-			motor_right(1, right_backward, speed)
+			motor_right(1, right_backward, right_speed)
 		elif turn == 'left':
 			motor_left(1, left_backward, speed)
-			motor_right(0, right_forward, int(speed*radius))
+			motor_right(0, right_forward, int(right_speed*radius))
 		else:
 			motor_left(1, left_backward, speed)
-			motor_right(1, right_backward, speed)
+			motor_right(1, right_backward, right_speed)
 	elif direction == 'backward':			
 		if turn == 'right':
 			motor_left(0, left_backward, int(speed*radius))
-			motor_right(1, right_forward, speed)
+			motor_right(1, right_forward, right_speed)
 		elif turn == 'left':
 			motor_left(1, left_forward, speed)
-			motor_right(0, right_backward, int(speed*radius))
+			motor_right(0, right_backward, int(right_speed*radius))
 		else:
 			motor_left(1, left_forward, speed)
-			motor_right(1, right_forward, speed)
+			motor_right(1, right_forward, right_speed)
 	elif direction == 'no':
 		if turn == 'right':
 			motor_left(1, left_backward, speed)
-			motor_right(1, right_forward, speed)
+			motor_right(1, right_forward, right_speed)
 		elif turn == 'left':
 			motor_left(1, left_forward, speed)
-			motor_right(1, right_backward, speed)
+			motor_right(1, right_backward, right_speed)
 		else:
 			motorStop()
 	else:
@@ -140,10 +141,10 @@ def destroy():
 
 if __name__ == '__main__':
 	try:
-		speed_set = 60
+		speed_set = 80 #Balance speed
 		setup()
 		move(speed_set, 'forward', 'no', 0.8)
-		time.sleep(1.3)
+		time.sleep(30)
 		motorStop()
 		destroy()
 	except KeyboardInterrupt:
