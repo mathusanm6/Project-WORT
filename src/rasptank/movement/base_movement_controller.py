@@ -14,10 +14,6 @@ class BaseMovementController(MovementAPI):
         # Apply movement
         result = self._apply_movement(**validated_params)
         
-        # Handle timed movements if needed
-        if validated_params["duration"] > 0:
-            self._schedule_stop(validated_params["duration"])
-        
         return result
     
     def stop(self):
@@ -42,8 +38,3 @@ class BaseMovementController(MovementAPI):
         # To be implemented by concrete classes
         self._state = motor_values
         return self._state
-    
-    def _schedule_stop(self, duration):
-        """Schedule a stop after the specified duration"""
-        # To be implemented by concrete classes
-        pass
