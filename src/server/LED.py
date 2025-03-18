@@ -4,9 +4,10 @@
 # Website     : based on the code from https://github.com/rpi-ws281x/rpi-ws281x-python/blob/master/examples/strandtest.py
 # Author      : original code by Tony DiCola (tony@tonydicola.com)
 # Date        : 2019/02/23
-import time
-from rpi_ws281x import *
 import argparse
+import time
+
+from rpi_ws281x import *
 
 # LED strip configuration:
 LED_COUNT = 12  # Number of LED pixels.
@@ -26,14 +27,10 @@ class LED:
         self.LED_FREQ_HZ = 800000  # LED signal frequency in hertz (usually 800khz)
         self.LED_DMA = 10  # DMA channel to use for generating signal (try 10)
         self.LED_BRIGHTNESS = 255  # Set to 0 for darkest and 255 for brightest
-        self.LED_INVERT = (
-            False  # True to invert the signal (when using NPN transistor level shift)
-        )
+        self.LED_INVERT = False  # True to invert the signal (when using NPN transistor level shift)
         self.LED_CHANNEL = 0  # set to '1' for GPIOs 13, 19, 41, 45 or 53
         parser = argparse.ArgumentParser()
-        parser.add_argument(
-            "-c", "--clear", action="store_true", help="clear the display on exit"
-        )
+        parser.add_argument("-c", "--clear", action="store_true", help="clear the display on exit")
         args = parser.parse_args()
 
         # Create NeoPixel object with appropriate configuration.

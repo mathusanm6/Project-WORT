@@ -1,14 +1,15 @@
-import Adafruit_PCA9685
 import curses
 import json
-from time import sleep, time
 import subprocess
-from rpi_ws281x import *
-import RPi.GPIO as GPIO
-import InfraLib
+import textwrap
 import threading
 import uuid
-import textwrap
+from time import sleep, time
+
+import Adafruit_PCA9685
+import InfraLib
+import RPi.GPIO as GPIO
+from rpi_ws281x import *
 
 tests_status = {
     "servo": {"arm": 0, "front_arm": 0, "canon": 0},
@@ -47,7 +48,6 @@ def draw_status(status_win):
     status_win.addstr(0, start_x_title, title)
     y = 1
     for test_category, tests in tests_status.items():
-
         if type(tests) == dict:
             status_win.addstr(y, 1, f"{test_category.capitalize()}")
             y += 1
@@ -67,7 +67,6 @@ def draw_status(status_win):
 
 
 def testServos(instructions_win, status_win):
-
     pwm = Adafruit_PCA9685.PCA9685()
     pwm.set_pwm_freq(50)
 
@@ -91,7 +90,6 @@ def testServos(instructions_win, status_win):
         pos = servo_info.get(servo).get("default")
         pwm.set_pwm(servoIDs.get(servo), 0, pos)
         if servo != "canon_rotation":
-
             draw_instructions(instructions_win, [f"Testing {servo} servo"])
 
             while pos < servo_info.get(servo).get("max"):
@@ -123,7 +121,6 @@ def testServos(instructions_win, status_win):
 
 
 def testCamera(instructions_win, status_win):
-
     draw_instructions(
         instructions_win,
         [
@@ -136,9 +133,7 @@ def testCamera(instructions_win, status_win):
 
     subprocess.run("raspistill -t 3000", shell=True)
 
-    draw_instructions(
-        instructions_win, ["Camera Testing Phase:", "Did it work? Press y/n"]
-    )
+    draw_instructions(instructions_win, ["Camera Testing Phase:", "Did it work? Press y/n"])
     key = instructions_win.getch()
 
     if key == ord("y"):
@@ -152,7 +147,6 @@ def testCamera(instructions_win, status_win):
 
 
 def testMotors(instructions_win, status_win):
-
     Motor_A_EN = 7
     Motor_B_EN = 11
 
@@ -247,9 +241,7 @@ def testMotors(instructions_win, status_win):
     sleep(1)
     motorStop()
 
-    draw_instructions(
-        instructions_win, ["Motor Testing Phase:", "Did it work? Press y/n"]
-    )
+    draw_instructions(instructions_win, ["Motor Testing Phase:", "Did it work? Press y/n"])
     key = instructions_win.getch()
 
     if key == ord("y"):
@@ -282,9 +274,7 @@ def testMotors(instructions_win, status_win):
 
     GPIO.cleanup()
 
-    draw_instructions(
-        instructions_win, ["Motor Testing Phase:", "Did it work? Press y/n"]
-    )
+    draw_instructions(instructions_win, ["Motor Testing Phase:", "Did it work? Press y/n"])
     key = instructions_win.getch()
 
     if key == ord("y"):
@@ -303,9 +293,7 @@ def testLEDs(instructions_win, status_win):
     LED_FREQ_HZ = 800000  # LED signal frequency in hertz (usually 800khz)
     LED_DMA = 10  # DMA channel to use for generating signal (try 10)
     LED_BRIGHTNESS = 255  # Set to 0 for darkest and 255 for brightest
-    LED_INVERT = (
-        False  # True to invert the signal (when using NPN transistor level shift)
-    )
+    LED_INVERT = False  # True to invert the signal (when using NPN transistor level shift)
     LED_CHANNEL = 0  # set to '1' for GPIOs 13, 19, 41, 45 or 53
 
     strip = Adafruit_NeoPixel(
@@ -346,9 +334,7 @@ def testLEDs(instructions_win, status_win):
 
     colorWipe(0, 0, 0)
 
-    draw_instructions(
-        instructions_win, ["LED Testing Phase:", "Did it work? Press y/n"]
-    )
+    draw_instructions(instructions_win, ["LED Testing Phase:", "Did it work? Press y/n"])
     key = instructions_win.getch()
 
     if key == ord("y"):
@@ -362,7 +348,6 @@ def testLEDs(instructions_win, status_win):
 
 
 def testInfraLED(instructions_win, status_win, again=False):
-
     if not again:
         draw_instructions(
             instructions_win,
@@ -415,7 +400,6 @@ def testInfraLED(instructions_win, status_win, again=False):
 
 
 def testInfraReceiver(instructions_win, status_win):
-
     draw_instructions(
         instructions_win,
         [
@@ -472,7 +456,6 @@ def testInfraReceiver(instructions_win, status_win):
 
 
 def testTrackingModule(instructions_win, status_win):
-
     LINE_PIN_MIDDLE = 36
     GPIO.setwarnings(False)
     GPIO.setmode(GPIO.BOARD)

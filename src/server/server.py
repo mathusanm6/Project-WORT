@@ -1,9 +1,10 @@
-import random
-import paho.mqtt.client as mqtt
-import time
-import threading
 import os
+import random
 import sys
+import threading
+import time
+
+import paho.mqtt.client as mqtt
 
 # blueTeamQRCode = "0x4d61792074686520666f726365206265207769746820796f7521"
 # redTeamQRCode = "0x596f7520646f6e2774206b6e6f772074686520706f776572206f6620746865206461726b207369646521"
@@ -84,17 +85,12 @@ def processData(client, userdata, message):
                         print(participant_id + " has already the flag")
                     else:
                         client.publish(message.topic, "NOT_ONBASE")
-                        print(
-                            "Hey " + participant_id + ", there is no flag here anymore"
-                        )
+                        print("Hey " + participant_id + ", there is no flag here anymore")
 
                 elif querry[0] == "EXIT_FLAG_AREA":
                     if participants[participant_id]["catching"]:
                         client.publish(message.topic, "ABORT_CATCHING_EXIT")
-                        print(
-                            participant_id
-                            + " abort catching the flag, you exited the flag area"
-                        )
+                        print(participant_id + " abort catching the flag, you exited the flag area")
                         participants[participant_id]["catching"] = False
 
             elif message.topic[22:] == "shots":
@@ -102,19 +98,10 @@ def processData(client, userdata, message):
                     shot = querry[1][:4]
                     shooter = "0x" + querry[1][4:]
                     if shooter in participants.keys():
-                        if (
-                            participants[participant_id]["color"]
-                            != participants[shooter]["color"]
-                        ):
+                        if participants[participant_id]["color"] != participants[shooter]["color"]:
                             client.publish(message.topic + "/in", "SHOT")
                             client.publish("tanks/" + shooter + "/shots/out", "SHOT")
-                            print(
-                                participant_id
-                                + " shot by "
-                                + shooter
-                                + " with "
-                                + weapons[shot]
-                            )
+                            print(participant_id + " shot by " + shooter + " with " + weapons[shot])
 
                             # Flag check
                             if participants[participant_id]["catching"]:
@@ -122,22 +109,15 @@ def processData(client, userdata, message):
                                     "tanks/" + participant_id + "/flag",
                                     "ABORT_CATCHING_SHOT",
                                 )
-                                print(
-                                    participant_id
-                                    + " abort catching the flag, you got shot"
-                                )
+                                print(participant_id + " abort catching the flag, you got shot")
                                 participants[participant_id]["catching"] = False
                             if participants[participant_id]["flag"]:
-                                client.publish(
-                                    "tanks/" + participant_id + "/flag", "FLAG_LOST"
-                                )
+                                client.publish("tanks/" + participant_id + "/flag", "FLAG_LOST")
                                 print(participant_id + " you lost the flag")
                                 participants[participant_id]["flag"] = False
                         else:
                             if participant_id != shooter:
-                                client.publish(
-                                    "tanks/" + shooter + "/shots/out", "FRIENDLY_FIRE"
-                                )
+                                client.publish("tanks/" + shooter + "/shots/out", "FRIENDLY_FIRE")
                                 print("Carefull " + shooter + ", friendly fire")
 
             elif message.topic[22:] == "qr_code":
@@ -146,9 +126,7 @@ def processData(client, userdata, message):
                     if qr == qr_codes.get(participants[participant_id]["color"]):
                         client.publish(message.topic, "SCAN_SUCCESSFUL")
                         if participants[participant_id]["flag"]:
-                            client.publish(
-                                "tanks/" + participant_id + "/flag", "FLAG_DEPOSITED"
-                            )
+                            client.publish("tanks/" + participant_id + "/flag", "FLAG_DEPOSITED")
                             participants[participant_id]["flag"] = False
                             # Winner check
                             scores[participants[participant_id]["color"]] += 1
@@ -160,9 +138,7 @@ def processData(client, userdata, message):
                                         "WIN " + participants[participant_id]["color"],
                                     )
                         else:
-                            client.publish(
-                                "tanks/" + participant_id + "/flag", "NO_FLAG"
-                            )
+                            client.publish("tanks/" + participant_id + "/flag", "NO_FLAG")
                             print(participant_id + ", there is not flat to deposit")
                     else:
                         client.publish(message.topic, "SCAN_FAILED")
@@ -183,7 +159,6 @@ def new_game():
 
 # Main
 if __name__ == "__main__":
-
     initPhase = True
     participants = {}
     scores = {"RED": 0, "BLUE": 0}

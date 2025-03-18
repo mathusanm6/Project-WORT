@@ -58,3 +58,6 @@ Sur le Git, vous trouverez des guides pour chaque partie du projet, offrant des 
 Toutes les approches présentées sont viables. Vous avez la liberté de choisir celle qui vous semble la plus appropriée, ou même d'adopter une méthode non décrite dans le guide.
 
 Les choix d'implémentation que je recommande sont signalés par une étoile :star:. Si vous ne privilégiez pas une méthode en particulier, suivre ces recommandations peut être une bonne option.
+
+### Pour participer au développement du projet
+Voir le fichier [DEVELOP.md](DEVELOP.md)

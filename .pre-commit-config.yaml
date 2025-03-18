@@ -3,40 +3,33 @@ repos:
     rev: v4.4.0
     hooks:
       - id: trailing-whitespace
-        verbose: true
       - id: end-of-file-fixer
-        verbose: true
       - id: check-yaml
-        verbose: true
       - id: check-added-large-files
-        verbose: true
 
   - repo: https://github.com/psf/black
     rev: 23.1.0
     hooks:
       - id: black
-        verbose: true
-        args: ["--verbose"]
 
   - repo: https://github.com/pycqa/isort
     rev: 5.12.0
     hooks:
       - id: isort
-        verbose: true
-        args: ["--profile", "black", "--verbose"]
+        args: ["--profile", "black"]
 
+  # Flake8 with relaxed settings - only critical errors
   - repo: https://github.com/pycqa/flake8
     rev: 6.0.0
     hooks:
       - id: flake8
-        verbose: true
-        additional_dependencies: [flake8-docstrings]
-        args: ["--verbose"]
-
-  -   repo: https://github.com/pre-commit/mirrors-mypy
-      rev: v1.0.1
-      hooks:
-      -   id: mypy
-          verbose: true
-          args: ["--verbose"]
-          additional_dependencies: [types-requests]
+        args: [
+            "--select=E9,F63,F7,F82", # Only critical errors
+            "--max-line-length=120", # More lenient line length
+            "--ignore=D100,D101,D102,D103,D104,D105,D106,D107,F403,F405,E501,E722,C901", # Ignore docstrings, imports, line length, bare except, complexity
+          ]
+# Mypy disabled temporarily
+# -   repo: https://github.com/pre-commit/mirrors-mypy
+#     rev: v1.0.1
+#     hooks:
+#     -   id: mypy

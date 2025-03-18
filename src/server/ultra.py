@@ -4,8 +4,9 @@
 # Website     : www.gewbot.com
 # Author      : William
 # Date        : 2019/02/23
-import RPi.GPIO as GPIO
 import time
+
+import RPi.GPIO as GPIO
 
 Tr = 11
 Ec = 8
@@ -34,9 +35,7 @@ def checkdist():  # Reading distance
             pass
         t2 = time.time()
         dist = (t2 - t1) * 340 / 2
-        if (
-            dist > 9 and i < 4
-        ):  # 5 consecutive times are invalid data, return the last test data
+        if dist > 9 and i < 4:  # 5 consecutive times are invalid data, return the last test data
             continue
         else:
             return (t2 - t1) * 340 / 2
