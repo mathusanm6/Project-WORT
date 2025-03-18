@@ -8,16 +8,18 @@ import os
 curpath = os.path.realpath(__file__)
 thisPath = "/" + os.path.dirname(curpath)
 
-def replace_num(file,initial,new_num):
-    newline=""
-    str_num=str(new_num)
-    with open(file,"r") as f:
+
+def replace_num(file, initial, new_num):
+    newline = ""
+    str_num = str(new_num)
+    with open(file, "r") as f:
         for line in f.readlines():
-            if(line.find(initial) == 0):
-                line = (str_num+'\n')
+            if line.find(initial) == 0:
+                line = str_num + "\n"
             newline += line
-    with open(file,"w") as f:
+    with open(file, "w") as f:
         f.writelines(newline)
+
 
 commands_1 = [
     "sudo apt-get update",
@@ -54,7 +56,7 @@ for x in range(3):
 commands_2 = [
     "sudo pip3 install RPi.GPIO",
     "sudo apt-get -y install libqtgui4 libhdf5-dev libhdf5-serial-dev libatlas-base-dev libjasper-dev libqt4-test",
-    "sudo pip3 install -r /home/pi/ProgReseau/src/rasptank/requirements.txt"
+    "sudo pip3 install -r /home/pi/ProgReseau/src/rasptank/requirements.txt",
 ]
 
 mark_2 = 0
@@ -68,7 +70,7 @@ for x in range(3):
 
 commands_3 = [
     "sudo pip3 install numpy",
-    "sudo pip3 install imutils zmq pybase64 psutil"
+    "sudo pip3 install imutils zmq pybase64 psutil",
 ]
 
 mark_3 = 0
@@ -81,17 +83,21 @@ for x in range(3):
         break
 
 try:
-    replace_num("/boot/config.txt", '#dtparam=i2c_arm=on','dtparam=i2c_arm=on\nstart_x=1\n')
+    replace_num(
+        "/boot/config.txt", "#dtparam=i2c_arm=on", "dtparam=i2c_arm=on\nstart_x=1\n"
+    )
 except:
-    print('Error updating boot config to enable i2c. Please try again.')
+    print("Error updating boot config to enable i2c. Please try again.")
 
-try: #fix conflict with onboard Raspberry Pi audio
-    os.system('sudo touch /etc/modprobe.d/snd-blacklist.conf')
-    with open("/etc/modprobe.d/snd-blacklist.conf",'w') as file_to_write:
+try:  # fix conflict with onboard Raspberry Pi audio
+    os.system("sudo touch /etc/modprobe.d/snd-blacklist.conf")
+    with open("/etc/modprobe.d/snd-blacklist.conf", "w") as file_to_write:
         file_to_write.write("blacklist snd_bcm2835")
 except:
     pass
 
-print('The program in Raspberry Pi has been installed, disconnected and restarted. \nYou can now power off the Raspberry Pi to install the camera and driver board (Robot HAT). \nAfter turning on again, the Raspberry Pi will automatically run the program to set the servos port signal to turn the servos to the middle position, which is convenient for mechanical assembly.')
-print('restarting...')
+print(
+    "The program in Raspberry Pi has been installed, disconnected and restarted. \nYou can now power off the Raspberry Pi to install the camera and driver board (Robot HAT). \nAfter turning on again, the Raspberry Pi will automatically run the program to set the servos port signal to turn the servos to the middle position, which is convenient for mechanical assembly."
+)
+print("restarting...")
 os.system("sudo reboot")

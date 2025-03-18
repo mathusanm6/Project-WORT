@@ -5,16 +5,21 @@ import threading
 import os
 import sys
 
-#blueTeamQRCode = "0x4d61792074686520666f726365206265207769746820796f7521"
-#redTeamQRCode = "0x596f7520646f6e2774206b6e6f772074686520706f776572206f6620746865206461726b207369646521"
+# blueTeamQRCode = "0x4d61792074686520666f726365206265207769746820796f7521"
+# redTeamQRCode = "0x596f7520646f6e2774206b6e6f772074686520706f776572206f6620746865206461726b207369646521"
 
 qr_codes = {"RED": "Hello_World", "BLUE": "Hello_World"}
 weapons = {"0xf1": "Laser Gun"}
 
+
 def assignToTeam(id):
-    if sum(x['color'] == "RED" for x in participants.values()) < sum(x['color'] == "BLUE" for x in participants.values()):
+    if sum(x["color"] == "RED" for x in participants.values()) < sum(
+        x["color"] == "BLUE" for x in participants.values()
+    ):
         addToRedTeam(id)
-    elif sum(x['color'] == "RED" for x in participants.values()) > sum(x['color'] == "BLUE" for x in participants.values()):
+    elif sum(x["color"] == "RED" for x in participants.values()) > sum(
+        x["color"] == "BLUE" for x in participants.values()
+    ):
         addToBlueTeam(id)
     else:
         if random.choice(["RED", "BLUE"]) == "RED":
@@ -22,20 +27,21 @@ def assignToTeam(id):
         else:
             addToBlueTeam(id)
 
-    client.publish("tanks/"+id+"/init", "END")
+    client.publish("tanks/" + id + "/init", "END")
 
 
 def addToBlueTeam(id):
     participants[id] = {"color": "BLUE", "flag": False, "catching": False}
-    client.publish("tanks/"+id+"/init", "TEAM BLUE")
-    client.publish("tanks/"+id+"/init", "QR_CODE "+qr_codes["BLUE"])
-    print("Rasptank "+id+" is BLUE")
+    client.publish("tanks/" + id + "/init", "TEAM BLUE")
+    client.publish("tanks/" + id + "/init", "QR_CODE " + qr_codes["BLUE"])
+    print("Rasptank " + id + " is BLUE")
+
 
 def addToRedTeam(id):
     participants[id] = {"color": "RED", "flag": False, "catching": False}
-    client.publish("tanks/"+id+"/init", "TEAM RED")
-    client.publish("tanks/"+id+"/init", "QR_CODE "+qr_codes["RED"])
-    print("Rasptank "+id+" is RED")
+    client.publish("tanks/" + id + "/init", "TEAM RED")
+    client.publish("tanks/" + id + "/init", "QR_CODE " + qr_codes["RED"])
+    print("Rasptank " + id + " is RED")
 
 
 def giveFlag(id, topic):
@@ -60,7 +66,7 @@ def processData(client, userdata, message):
             if initPhase:
                 assignToTeam(querry[1])
             else:
-                client.publish("tanks/"+querry[1]+"/init", "GAME_ALREADY_STARTED")
+                client.publish("tanks/" + querry[1] + "/init", "GAME_ALREADY_STARTED")
     else:
         participant_id = message.topic[6:21]
         if participant_id in participants.keys():
@@ -70,18 +76,25 @@ def processData(client, userdata, message):
                         client.publish(message.topic, "START_CATCHING")
                         print(participant_id + " start catching the flag")
                         participants[participant_id]["catching"] = True
-                        threading.Thread(target=giveFlag, args=[participant_id, message.topic]).start()
+                        threading.Thread(
+                            target=giveFlag, args=[participant_id, message.topic]
+                        ).start()
                     elif participants[participant_id]["flag"]:
                         client.publish(message.topic, "ALREADY_GOT")
                         print(participant_id + " has already the flag")
                     else:
                         client.publish(message.topic, "NOT_ONBASE")
-                        print("Hey " + participant_id + ", there is no flag here anymore")
+                        print(
+                            "Hey " + participant_id + ", there is no flag here anymore"
+                        )
 
                 elif querry[0] == "EXIT_FLAG_AREA":
                     if participants[participant_id]["catching"]:
                         client.publish(message.topic, "ABORT_CATCHING_EXIT")
-                        print(participant_id + " abort catching the flag, you exited the flag area")
+                        print(
+                            participant_id
+                            + " abort catching the flag, you exited the flag area"
+                        )
                         participants[participant_id]["catching"] = False
 
             elif message.topic[22:] == "shots":
@@ -89,23 +102,42 @@ def processData(client, userdata, message):
                     shot = querry[1][:4]
                     shooter = "0x" + querry[1][4:]
                     if shooter in participants.keys():
-                        if participants[participant_id]["color"] != participants[shooter]["color"]:
-                            client.publish(message.topic+"/in", "SHOT")
-                            client.publish("tanks/"+shooter+"/shots/out", "SHOT")
-                            print(participant_id + " shot by " + shooter + " with " + weapons[shot])
+                        if (
+                            participants[participant_id]["color"]
+                            != participants[shooter]["color"]
+                        ):
+                            client.publish(message.topic + "/in", "SHOT")
+                            client.publish("tanks/" + shooter + "/shots/out", "SHOT")
+                            print(
+                                participant_id
+                                + " shot by "
+                                + shooter
+                                + " with "
+                                + weapons[shot]
+                            )
 
                             # Flag check
                             if participants[participant_id]["catching"]:
-                                client.publish("tanks/"+participant_id+"/flag", "ABORT_CATCHING_SHOT")
-                                print(participant_id + " abort catching the flag, you got shot")
+                                client.publish(
+                                    "tanks/" + participant_id + "/flag",
+                                    "ABORT_CATCHING_SHOT",
+                                )
+                                print(
+                                    participant_id
+                                    + " abort catching the flag, you got shot"
+                                )
                                 participants[participant_id]["catching"] = False
                             if participants[participant_id]["flag"]:
-                                client.publish("tanks/"+participant_id+"/flag", "FLAG_LOST")
+                                client.publish(
+                                    "tanks/" + participant_id + "/flag", "FLAG_LOST"
+                                )
                                 print(participant_id + " you lost the flag")
                                 participants[participant_id]["flag"] = False
                         else:
                             if participant_id != shooter:
-                                client.publish("tanks/"+shooter+"/shots/out", "FRIENDLY_FIRE")
+                                client.publish(
+                                    "tanks/" + shooter + "/shots/out", "FRIENDLY_FIRE"
+                                )
                                 print("Carefull " + shooter + ", friendly fire")
 
             elif message.topic[22:] == "qr_code":
@@ -114,19 +146,27 @@ def processData(client, userdata, message):
                     if qr == qr_codes.get(participants[participant_id]["color"]):
                         client.publish(message.topic, "SCAN_SUCCESSFUL")
                         if participants[participant_id]["flag"]:
-                            client.publish("tanks/"+participant_id+"/flag", "FLAG_DEPOSITED")
+                            client.publish(
+                                "tanks/" + participant_id + "/flag", "FLAG_DEPOSITED"
+                            )
                             participants[participant_id]["flag"] = False
                             # Winner check
                             scores[participants[participant_id]["color"]] += 1
                             print("RED :", scores["RED"], "// BLUE :", scores["BLUE"])
                             if scores[participants[participant_id]["color"]] == 1:
                                 for id in participants.keys():
-                                    client.publish("tanks/"+id+"/flag", "WIN "+participants[participant_id]["color"])
+                                    client.publish(
+                                        "tanks/" + id + "/flag",
+                                        "WIN " + participants[participant_id]["color"],
+                                    )
                         else:
-                            client.publish("tanks/"+participant_id+"/flag", "NO_FLAG")
+                            client.publish(
+                                "tanks/" + participant_id + "/flag", "NO_FLAG"
+                            )
                             print(participant_id + ", there is not flat to deposit")
                     else:
                         client.publish(message.topic, "SCAN_FAILED")
+
 
 def start_game():
     print("Welcome to World of Rasptank")
@@ -134,9 +174,10 @@ def start_game():
     initPhase = False
     print("Initialisation phase finished")
 
+
 def new_game():
-    os.system('clear')
-    scores = {"RED":0, "BLUE":0}
+    os.system("clear")
+    scores = {"RED": 0, "BLUE": 0}
     print("New Game")
 
 
@@ -145,7 +186,7 @@ if __name__ == "__main__":
 
     initPhase = True
     participants = {}
-    scores = {"RED":0, "BLUE":0}
+    scores = {"RED": 0, "BLUE": 0}
 
     client = mqtt.Client()
     client.connect("192.168.0.100")
