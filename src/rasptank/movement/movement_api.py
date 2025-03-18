@@ -2,18 +2,27 @@
 
 from typing import Dict, Any
 
+class ThrustDirection:
+    FORWARD = "forward"
+    BACKWARD = "backward"
+    NONE = "none"
+
+class TurnDirection:
+    LEFT = "left"
+    RIGHT = "right"
+    NONE = "none"
 
 class MovementAPI:
     """Interface contract for Rasptank movement functionality."""
     
-    def move(self, direction, speed, rotation=0.0, duration=0) -> Dict[str, Any]:
+    def move(self, thrust: ThrustDirection, turn: TurnDirection, speed: float, turn_factor: float) -> Dict[str, Any]:
         """Move the Rasptank in a given direction at a given speed for a given duration.
         
         Args:
-            direction (str): Direction of movement ('forward', 'backward', 'left', 'right', 'stop')
+            thrust (ThrustDirection): Thrust direction ('forward', 'backward', or 'none')
+            turn (TurnDirection): Turn direction ('left', 'right', or 'none')
             speed (float): Speed factor between 0.0 and 1.0
-            rotation (float): Rotation factor between -1.0 (left) and 1.0 (right)
-            duration (int): Duration in ms (0 for continuous)
+            turn_factor (float): Turning factor between -1.0 (full left) and 1.0 (full right)
         
         Returns:
             dict: Current motor state after applying the movement command
