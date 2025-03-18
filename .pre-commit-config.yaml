@@ -1,0 +1,43 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+        verbose: true
+      - id: end-of-file-fixer
+        verbose: true
+      - id: check-yaml
+        verbose: true
+      - id: check-added-large-files
+        verbose: true
+
+  - repo: https://github.com/psf/black
+    rev: 23.1.0
+    hooks:
+      - id: black
+        verbose: true
+        args: ["--verbose"]
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.12.0
+    hooks:
+      - id: isort
+        verbose: true
+        args: ["--profile", "black", "--verbose"]
+
+  - repo: https://github.com/pycqa/flake8
+    rev: 6.0.0
+    hooks:
+      - id: flake8
+        verbose: true
+        additional_dependencies: [flake8-docstrings]
+        args: ["--verbose"]
+# Disabling mypy initially as it often causes silent failures
+# Uncomment once other hooks are working reliably
+# -   repo: https://github.com/pre-commit/mirrors-mypy
+#     rev: v1.0.1
+#     hooks:
+#     -   id: mypy
+#         verbose: true
+#         args: ["--verbose"]
+#         additional_dependencies: [types-requests]
