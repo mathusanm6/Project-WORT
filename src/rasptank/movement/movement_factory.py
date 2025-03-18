@@ -1,6 +1,5 @@
 from enum import Enum
 from default_movement_controller import DefaultMovementController
-from mock_movement_controller import MockMovementController
 # from mqtt_movement_controller import MQTTMovementController
 
 class MovementControllerType(Enum):
@@ -13,7 +12,6 @@ class MovementControllerType(Enum):
     """
     DEFAULT = 0
     MQTT = 1
-    MOCK = 2
 
 class MovementFactory:
     """Factory for creating movement implementations."""
@@ -31,7 +29,6 @@ class MovementFactory:
         """
         # if controller_type == MovementControllerType.MQTT:
         #     return MQTTMovementController(**kwargs)
-        if controller_type == MovementControllerType.MOCK:
-            return MockMovementController(**kwargs)
-        else:
-            return DefaultMovementController(**kwargs)
+        # else:
+        #    return DefaultMovementController(**kwargs)
+        return DefaultMovementController(**kwargs)
