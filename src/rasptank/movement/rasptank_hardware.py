@@ -101,25 +101,25 @@ class RasptankHardware:
     def move_hardware(self, thrust_direction, turn_direction, speed, turn_factor):
         """Direct hardware movement implementation"""
         # Adjust right speed to compensate for hardware differences
-        right_speed = speed * 0.85  # right crawler faster than left one
+        right_speed = speed * 0.85  # right track is faster than left track
         
         if thrust_direction == ThrustDirection.FORWARD:
             if turn_direction == TurnDirection.RIGHT:
-                self.motor_left(0, self.left_forward, int(speed*radius))
+                self.motor_left(0, self.left_forward, int(speed*turn_factor))
                 self.motor_right(1, self.right_backward, right_speed)
             elif turn_direction == TurnDirection.LEFT:
                 self.motor_left(1, self.left_backward, speed)
-                self.motor_right(0, self.right_forward, int(right_speed*radius))
+                self.motor_right(0, self.right_forward, int(right_speed*turn_factor))
             else:
                 self.motor_left(1, self.left_backward, speed)
                 self.motor_right(1, self.right_backward, right_speed)
         elif thrust_direction == ThrustDirection.BACKWARD:          
             if turn_direction == TurnDirection.RIGHT:
-                self.motor_left(0, self.left_backward, int(speed*radius))
+                self.motor_left(0, self.left_backward, int(speed*turn_factor))
                 self.motor_right(1, self.right_forward, right_speed)
             elif turn_direction == TurnDirection.LEFT:
                 self.motor_left(1, self.left_forward, speed)
-                self.motor_right(0, self.right_backward, int(right_speed*radius))
+                self.motor_right(0, self.right_backward, int(right_speed*turn_factor))
             else:
                 self.motor_left(1, self.left_forward, speed)
                 self.motor_right(1, self.right_forward, right_speed)
