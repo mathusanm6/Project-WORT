@@ -34,10 +34,10 @@ repos:
         args: ["--verbose"]
 # Disabling mypy initially as it often causes silent failures
 # Uncomment once other hooks are working reliably
-# -   repo: https://github.com/pre-commit/mirrors-mypy
-#     rev: v1.0.1
-#     hooks:
-#     -   id: mypy
-#         verbose: true
-#         args: ["--verbose"]
-#         additional_dependencies: [types-requests]
+  -   repo: https://github.com/pre-commit/mirrors-mypy
+      rev: v1.0.1
+      hooks:
+      -   id: mypy
+          verbose: true
+          args: ["--verbose"]
+          additional_dependencies: [types-requests]
