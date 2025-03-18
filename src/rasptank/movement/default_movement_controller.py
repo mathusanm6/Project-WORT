@@ -54,26 +54,6 @@ class DefaultMovementController:
         
         return self.state
     
-    def _schedule_stop(self, duration):
-        """Schedule a stop after the specified duration (in ms)"""
-        timer_id = f"timer-{time.time()}"
-        
-        def stop_callback():
-            self.stop()
-            with self.timer_lock:
-                if timer_id in self.pending_timers:
-                    del self.pending_timers[timer_id]
-        
-        # Create and start timer
-        timer = threading.Timer(duration / 1000.0, stop_callback)
-        timer.daemon = True
-        
-        with self.timer_lock:
-            self.pending_timers[timer_id] = timer
-            
-        timer.start()
-        return timer_id
-    
     def cleanup(self):
         """Clean up resources"""
         # Cancel all pending timers
