@@ -3,6 +3,8 @@
 import time
 import RPi.GPIO as GPIO
 
+from rasptank.movement.movement_api import ThrustDirection, TurnDirection
+
 class RasptankHardware:
     """Hardware-specific implementation for Rasptank motors"""
     
@@ -96,36 +98,36 @@ class RasptankHardware:
                 GPIO.output(self.Motor_A_Pin2, GPIO.HIGH)
                 self.pwm_A.ChangeDutyCycle(speed)
     
-    def move_hardware(self, direction, turn, speed, radius=0.6):
+    def move_hardware(self, thrust_direction, turn_direction, speed, turn_factor):
         """Direct hardware movement implementation"""
         # Adjust right speed to compensate for hardware differences
         right_speed = speed * 0.85  # right crawler faster than left one
         
-        if direction == 'forward':
-            if turn == 'right':
+        if thrust_direction == ThrustDirection.FORWARD:
+            if turn_direction == TurnDirection.RIGHT:
                 self.motor_left(0, self.left_forward, int(speed*radius))
                 self.motor_right(1, self.right_backward, right_speed)
-            elif turn == 'left':
+            elif turn_direction == TurnDirection.LEFT:
                 self.motor_left(1, self.left_backward, speed)
                 self.motor_right(0, self.right_forward, int(right_speed*radius))
             else:
                 self.motor_left(1, self.left_backward, speed)
                 self.motor_right(1, self.right_backward, right_speed)
-        elif direction == 'backward':            
-            if turn == 'right':
+        elif thrust_direction == ThrustDirection.BACKWARD:          
+            if turn_direction == TurnDirection.RIGHT:
                 self.motor_left(0, self.left_backward, int(speed*radius))
                 self.motor_right(1, self.right_forward, right_speed)
-            elif turn == 'left':
+            elif turn_direction == TurnDirection.LEFT:
                 self.motor_left(1, self.left_forward, speed)
                 self.motor_right(0, self.right_backward, int(right_speed*radius))
             else:
                 self.motor_left(1, self.left_forward, speed)
                 self.motor_right(1, self.right_forward, right_speed)
-        elif direction == 'no':
-            if turn == 'right':
+        elif thrust_direction == ThrustDirection.NONE:
+            if turn_direction == TurnDirection.RIGHT:
                 self.motor_left(1, self.left_backward, speed)
                 self.motor_right(1, self.right_forward, right_speed)
-            elif turn == 'left':
+            elif turn_direction == TurnDirection.LEFT:
                 self.motor_left(1, self.left_forward, speed)
                 self.motor_right(1, self.right_backward, right_speed)
             else:
