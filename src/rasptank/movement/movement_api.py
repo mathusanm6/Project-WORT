@@ -15,13 +15,13 @@ class TurnDirection:
 class MovementAPI:
     """Interface contract for Rasptank movement functionality."""
     
-    def move(self, thrust: ThrustDirection, turn: TurnDirection, speed: float, turn_factor: float) -> Dict[str, Any]:
+    def move(self, thrust_direction: ThrustDirection, turn_direction: TurnDirection, speed: float, turn_factor: float) -> Dict[str, Any]:
         """Move the Rasptank in a given direction at a given speed for a given duration.
         
         Args:
-            thrust (ThrustDirection): Thrust direction ('forward', 'backward', or 'none')
-            turn (TurnDirection): Turn direction ('left', 'right', or 'none')
-            speed (float): Speed factor between 0.0 and 1.0
+            thrust_direction (ThrustDirection): Thrust direction ('forward', 'backward', or 'none')
+            turn_direction (TurnDirection): Turn direction ('left', 'right', or 'none')
+            speed (float): Speed factor between 0.0 and 100.0
             turn_factor (float): Turning factor between -1.0 (full left) and 1.0 (full right)
         
         Returns:
