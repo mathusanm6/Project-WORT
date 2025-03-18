@@ -5,15 +5,15 @@
 # Danijel Tudek, Aug 2016
 
 import ctypes
-import time
-import RPi.GPIO as GPIO
-import threading
-from datetime import datetime
-import multiprocessing
 import math
-from functools import reduce
+import multiprocessing
+import threading
+import time
 import uuid
+from datetime import datetime
+from functools import reduce
 
+import RPi.GPIO as GPIO
 
 #####################################
 #             IR Blaster            #
@@ -92,22 +92,14 @@ class NEC:
         self.leading_pulse_duration = (
             leading_pulse_duration  # in microseconds, 9000 per specification
         )
-        self.leading_gap_duration = (
-            leading_gap_duration  # in microseconds, 4500 per specification
+        self.leading_gap_duration = leading_gap_duration  # in microseconds, 4500 per specification
+        self.one_pulse_duration = one_pulse_duration  # in microseconds, 562 per specification
+        self.one_gap_duration = one_gap_duration  # in microseconds, 1686 per specification
+        self.zero_pulse_duration = zero_pulse_duration  # in microseconds, 562 per specification
+        self.zero_gap_duration = zero_gap_duration  # in microseconds, 562 per specification
+        self.trailing_pulse = (
+            trailing_pulse  # trailing 562 microseconds pulse, some remotes send it, some don't
         )
-        self.one_pulse_duration = (
-            one_pulse_duration  # in microseconds, 562 per specification
-        )
-        self.one_gap_duration = (
-            one_gap_duration  # in microseconds, 1686 per specification
-        )
-        self.zero_pulse_duration = (
-            zero_pulse_duration  # in microseconds, 562 per specification
-        )
-        self.zero_gap_duration = (
-            zero_gap_duration  # in microseconds, 562 per specification
-        )
-        self.trailing_pulse = trailing_pulse  # trailing 562 microseconds pulse, some remotes send it, some don't
         self.verbose = verbose
         if self.verbose:
             ("NEC protocol initialized")
@@ -169,9 +161,7 @@ class IR:
         self.gpio_pin = gpio_pin
         if self.verbose:
             print("Configuring pin %d as output" % self.gpio_pin)
-        self.pigpio.gpioSetMode(
-            self.gpio_pin, PI_OUTPUT
-        )  # pin 17 is used in LIRC by default
+        self.pigpio.gpioSetMode(self.gpio_pin, PI_OUTPUT)  # pin 17 is used in LIRC by default
         if self.verbose:
             print("Initializing protocol")
         if protocol == "NEC":
@@ -258,7 +248,6 @@ def calcRedundantBits(data):
 
 
 def posRedundantBits(data, r):
-
     # block parity bit (not used)
     data.insert(0, 0)
 
@@ -299,7 +288,6 @@ def calcParityBits(data, r):
 
 
 def encodeMsg(msg):
-
     data = list(map(int, msg))
 
     # Hamming(63, 57) ~ (64, 57)
@@ -360,7 +348,6 @@ def getSignal(channel, verbose=False):
     previousVal = 0
 
     while True:
-
         if value != previousVal:
             # The value has changed, so calculate the length of this run
             now = datetime.now()

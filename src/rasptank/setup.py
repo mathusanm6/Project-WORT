@@ -83,9 +83,7 @@ for x in range(3):
         break
 
 try:
-    replace_num(
-        "/boot/config.txt", "#dtparam=i2c_arm=on", "dtparam=i2c_arm=on\nstart_x=1\n"
-    )
+    replace_num("/boot/config.txt", "#dtparam=i2c_arm=on", "dtparam=i2c_arm=on\nstart_x=1\n")
 except:
     print("Error updating boot config to enable i2c. Please try again.")
 

@@ -1,6 +1,6 @@
 import time
-import RPi.GPIO as GPIO
 
+import RPi.GPIO as GPIO
 
 line_pin_right = 19
 line_pin_middle = 16
