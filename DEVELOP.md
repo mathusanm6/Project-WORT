@@ -1,5 +1,12 @@
 # Development
 
+## Install pyenv and download Python 3.12.6
+
+```bash
+pyenv install 3.12.6
+pyenv local 3.12.6
+```
+
 ## To create a virtual environment:
 
 ```bash
