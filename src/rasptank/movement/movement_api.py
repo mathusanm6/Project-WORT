@@ -1,7 +1,15 @@
-"""Defines the API contract for Rasptank movement system."""
+"""Interface for Rasptank movement functionality."""
 
+from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Any, Dict
+
+
+class State(Enum):
+    THRUST_DIRECTION = "thrust_direction"
+    TURN_DIRECTION = "turn_direction"
+    SPEED = "speed"
+    TURN_FACTOR = "turn_factor"
 
 
 class ThrustDirection(Enum):
@@ -16,41 +24,44 @@ class TurnDirection(Enum):
     NONE = "none"
 
 
-class MovementAPI:
-    """Interface contract for Rasptank movement functionality."""
+class MovementAPI(ABC):
+    """Interface for Rasptank movement functionality."""
 
+    @abstractmethod
     def move(
         self,
         thrust_direction: ThrustDirection,
         turn_direction: TurnDirection,
         speed: float,
         turn_factor: float,
-    ) -> Dict[str, Any]:
-        """Move the Rasptank in a given direction at a given speed for a given duration.
+    ) -> Dict[State, Any]:
+        """Move the Rasptank.
 
         Args:
-            thrust_direction (ThrustDirection): Thrust direction ('forward', 'backward', or 'none')
-            turn_direction (TurnDirection): Turn direction ('left', 'right', or 'none')
+            thrust_direction (ThrustDirection): Thrust direction
+            turn_direction (TurnDirection): Turn direction
             speed (float): Speed factor between 0.0 and 100.0
-            turn_factor (float): Turning factor between -1.0 (full left) and 1.0 (full right)
+            turn_factor (float): Turning factor between 0.0 and 1.0 (affects the sharpness of the turn)
 
         Returns:
-            dict: Current motor state after applying the movement command
+            dict: Current movement state after applying the movement
         """
-        pass
+        raise NotImplementedError
 
-    def stop(self) -> Dict[str, Any]:
+    @abstractmethod
+    def stop(self) -> Dict[State, Any]:
         """Immediately stop all movement.
 
         Returns:
-            dict: Current motor state after stopping
+            dict: Current movement state after stopping
         """
-        pass
+        raise NotImplementedError
 
-    def get_status(self) -> Dict[str, Any]:
-        """Get the current movement status.
+    @abstractmethod
+    def get_state(self) -> Dict[State, Any]:
+        """Get the current movement state.
 
         Returns:
-            dict: Current motor state
+            dict: Current movement state
         """
-        pass
+        raise NotImplementedError

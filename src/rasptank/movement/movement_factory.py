@@ -1,9 +1,10 @@
+"""Factory for creating movement controllers."""
+
 from enum import Enum
 
-from src.rasptank.movement.default_movement_controller import DefaultMovementController
-from src.rasptank.movement.mock_movement_controller import MockMovementController
-
-# from mqtt_movement_controller import MQTTMovementController
+from src.rasptank.movement.controller.default import DefaultMovementController
+from src.rasptank.movement.controller.mock import MockMovementController
+from src.rasptank.movement.controller.mqtt import MQTTMovementController
 
 
 class MovementControllerType(Enum):
@@ -11,33 +12,33 @@ class MovementControllerType(Enum):
 
     Attributes:
         DEFAULT (int): Default movement controller
-        MQTT (int): MQTT-based movement controller
         MOCK (int): Mock movement controller for testing
+        MQTT (int): MQTT-based movement controller
     """
 
     DEFAULT = 0
-    MQTT = 1
-    MOCK = 2
+    MOCK = 1
+    MQTT = 2
 
 
 class MovementFactory:
-    """Factory for creating movement implementations."""
+    """Factory for creating movement controllers."""
 
     @staticmethod
-    def create_movement_controller(controller_type=MovementControllerType.DEFAULT, **kwargs):
-        """Create a movement controller based on the given type.
+    def create_movement_controller(
+        controller_type: MovementControllerType = MovementControllerType.DEFAULT, **kwargs
+    ):
+        """Create a movement controller based on the given type `MovementControllerType`.
 
         Args:
             controller_type (MovementControllerType): Type of movement controller to create
             **kwargs: Additional configuration parameters
 
         Returns:
-            MovementAPI: An implementation of the MovementAPI interface
+            BaseMovementController: Instance of the created movement controller
         """
         if controller_type == MovementControllerType.MQTT:
-            # Return MQTT controller when implemented
-            # return MQTTMovementController(**kwargs)
-            raise NotImplementedError("MQTT controller not yet implemented")
+            return MQTTMovementController(**kwargs)
         elif controller_type == MovementControllerType.MOCK:
             return MockMovementController(**kwargs)
         else:
