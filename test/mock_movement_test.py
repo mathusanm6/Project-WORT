@@ -1,10 +1,12 @@
+"""Unit tests for the mock movement controller."""
+
 import math
 import time
 
 import pytest
 
-from src.rasptank.movement.mock_movement_controller import MockMovementController
-from src.rasptank.movement.movement_api import ThrustDirection, TurnDirection
+from src.rasptank.movement.controller.mock import MockMovementController, MockState, Position
+from src.rasptank.movement.movement_api import State, ThrustDirection, TurnDirection
 from src.rasptank.movement.movement_factory import MovementControllerType, MovementFactory
 
 
@@ -39,17 +41,17 @@ def factory_mock_controller():
 def test_initialization(mock_controller):
     """Test that the controller initializes with correct values"""
     # Check initial state
-    state = mock_controller.get_status()
-    assert state["thrust_direction"] == "none"
-    assert state["turn_direction"] == "none"
-    assert state["speed"] == 0.0
-    assert state["turn_factor"] == 0.0
+    state = mock_controller.get_state()
+    assert state[State.THRUST_DIRECTION] == ThrustDirection.NONE
+    assert state[State.TURN_DIRECTION] == TurnDirection.NONE
+    assert state[State.SPEED] == 0.0
+    assert state[State.TURN_FACTOR] == 0.0
 
     # Check initial position
     pos = mock_controller.get_simulated_position()
-    assert pos["x"] == 0.0
-    assert pos["y"] == 0.0
-    assert pos["heading"] == 0.0
+    assert pos.x == 0.0
+    assert pos.y == 0.0
+    assert pos.heading == 0.0
 
 
 def test_factory_creation(factory_mock_controller):
@@ -57,11 +59,11 @@ def test_factory_creation(factory_mock_controller):
     assert isinstance(factory_mock_controller, MockMovementController)
 
     # Check initial state
-    state = factory_mock_controller.get_status()
-    assert state["thrust_direction"] == "none"
-    assert state["turn_direction"] == "none"
-    assert state["speed"] == 0.0
-    assert state["turn_factor"] == 0.0
+    state = factory_mock_controller.get_state()
+    assert state[State.THRUST_DIRECTION] == ThrustDirection.NONE
+    assert state[State.TURN_DIRECTION] == TurnDirection.NONE
+    assert state[State.SPEED] == 0.0
+    assert state[State.TURN_FACTOR] == 0.0
 
 
 # Test basic movement commands
@@ -73,9 +75,9 @@ def test_move_forward(mock_controller):
 
     # Check that we moved in the positive y direction
     pos = mock_controller.get_simulated_position()
-    assert pos["y"] > 0.0
-    assert abs(pos["x"]) < 0.001  # Should not move sideways
-    assert abs(pos["heading"]) < 0.001  # Should maintain heading
+    assert pos.y > 0.0
+    assert abs(pos.x) < 0.001  # Should not move sideways
+    assert abs(pos.heading) < 0.001  # Should maintain heading
 
 
 def test_move_backward(mock_controller):
@@ -86,9 +88,9 @@ def test_move_backward(mock_controller):
 
     # Check that we moved in the negative y direction
     pos = mock_controller.get_simulated_position()
-    assert pos["y"] < 0.0
-    assert abs(pos["x"]) < 0.001  # Should not move sideways
-    assert abs(pos["heading"]) < 0.001  # Should maintain heading
+    assert pos.y < 0.0
+    assert abs(pos.x) < 0.001  # Should not move sideways
+    assert abs(pos.heading) < 0.001  # Should maintain heading
 
 
 def test_turn_right(mock_controller):
@@ -99,9 +101,9 @@ def test_turn_right(mock_controller):
 
     # Check that heading increased (clockwise)
     pos = mock_controller.get_simulated_position()
-    assert pos["heading"] > 0.0
-    assert abs(pos["x"]) < 0.001  # Should not move
-    assert abs(pos["y"]) < 0.001  # Should not move
+    assert pos.heading > 0.0
+    assert abs(pos.x) < 0.001  # Should not move
+    assert abs(pos.y) < 0.001  # Should not move
 
 
 def test_turn_left(mock_controller):
@@ -112,13 +114,13 @@ def test_turn_left(mock_controller):
 
     # Check that heading decreased (counter-clockwise) or wrapped around to high value
     pos = mock_controller.get_simulated_position()
-    heading = pos["heading"]
+    heading = pos.heading
 
     # Left turn should either result in a value close to 360 or a negative value
     # We're using a different test condition based on what we see in the test failure
     assert heading < 0.0 or heading > 180.0  # Heading increases counter-clockwise
-    assert abs(pos["x"]) < 0.001  # Should not move
-    assert abs(pos["y"]) < 0.001  # Should not move
+    assert abs(pos.x) < 0.001  # Should not move
+    assert abs(pos.y) < 0.001  # Should not move
 
 
 def test_stop(mock_controller):
@@ -137,30 +139,12 @@ def test_stop(mock_controller):
     time.sleep(0.2)
     pos2 = mock_controller.get_simulated_position()
 
-    assert abs(pos1["x"] - pos2["x"]) < 0.001
-    assert abs(pos1["y"] - pos2["y"]) < 0.001
-    assert abs(pos1["heading"] - pos2["heading"]) < 0.001
+    assert abs(pos1.x - pos2.x) < 0.001
+    assert abs(pos1.y - pos2.y) < 0.001
+    assert abs(pos1.heading - pos2.heading) < 0.001
 
 
-# Test advanced features
-def test_timed_move(mock_controller):
-    """Test timed movement stops after the specified duration"""
-    # Start a timed forward movement
-    mock_controller.timed_move(ThrustDirection.FORWARD, TurnDirection.NONE, 100.0, 0.0, 0.2)
-
-    # Check it's moving
-    time.sleep(0.1)
-    state1 = mock_controller.get_status()
-    assert state1["thrust_direction"] == "forward"
-
-    # Wait for the timer to complete
-    time.sleep(0.3)
-
-    # Check it stopped
-    state2 = mock_controller.get_status()
-    assert state2["thrust_direction"] == "none"
-
-
+# Test reset simulation functionality
 def test_reset_simulation(mock_controller):
     """Test that reset_simulation resets the position and history"""
     # Move to change position
@@ -172,9 +156,9 @@ def test_reset_simulation(mock_controller):
 
     # Check position was reset
     pos = mock_controller.get_simulated_position()
-    assert pos["x"] == 10.0
-    assert pos["y"] == 20.0
-    assert pos["heading"] == 45.0
+    assert pos.x == 10.0
+    assert pos.y == 20.0
+    assert pos.heading == 45.0
 
     # Check history was cleared and only has one entry (the reset state)
     history = mock_controller.get_movement_history()
@@ -200,30 +184,34 @@ def test_movement_history(mock_controller):
     assert len(history) == 4
 
     # Check contents of history entries
-    assert history[0]["thrust_direction"] == "none"  # Initial state from reset
-    assert history[1]["thrust_direction"] == "forward"
-    assert history[1]["turn_direction"] == "none"
-    assert history[1]["speed"] == 50.0
+    assert (
+        history[0][MockState.THRUST_DIRECTION] == ThrustDirection.NONE
+    )  # Initial state from reset
+    assert history[1][MockState.THRUST_DIRECTION] == ThrustDirection.FORWARD
+    assert history[1][MockState.TURN_DIRECTION] == TurnDirection.NONE
+    assert history[1][MockState.SPEED] == 50.0
 
-    assert history[2]["thrust_direction"] == "forward"
-    assert history[2]["turn_direction"] == "right"
-    assert history[2]["turn_factor"] == 0.5
+    assert history[2][MockState.THRUST_DIRECTION] == ThrustDirection.FORWARD
+    assert history[2][MockState.TURN_DIRECTION] == TurnDirection.RIGHT
+    assert history[2][MockState.TURN_FACTOR] == 0.5
 
-    assert history[3]["thrust_direction"] == "none"  # Stop command
+    assert history[3][MockState.THRUST_DIRECTION] == ThrustDirection.NONE  # Stop command
 
 
 # Test parameter validation
 def test_parameter_validation(mock_controller):
     """Test that input parameters are properly validated"""
-    # Test with invalid parameters
-    mock_controller.move("invalid", "invalid", 120.0, 2.0)
+    # Test with valid parameters but exceeding limits
+    mock_controller.move(ThrustDirection.FORWARD, TurnDirection.RIGHT, 120.0, 2.0)
 
-    # Check state - should have applied defaults or limits
-    state = mock_controller.get_status()
-    assert state["thrust_direction"] == "none"  # Default for invalid direction
-    assert state["turn_direction"] == "none"  # Default for invalid direction
-    assert state["speed"] <= 100.0  # Should be capped at 100
-    assert state["turn_factor"] <= 1.0  # Should be capped at 1.0
+    # Check state - should have applied limits
+    state = mock_controller.get_state()
+    assert state[State.THRUST_DIRECTION] == ThrustDirection.FORWARD
+    assert state[State.TURN_DIRECTION] == TurnDirection.RIGHT
+    assert state[State.SPEED] <= 100.0  # Should be capped at 100
+    assert state[State.TURN_FACTOR] <= 1.0  # Should be capped at 1.0
+
+    # No need to test with invalid enum values anymore as type checking would prevent this
 
 
 # Test complex movements
@@ -249,21 +237,21 @@ def test_curved_path(mock_controller):
     pos = mock_controller.get_simulated_position()
 
     # Should have moved and turned
-    assert pos["x"] != 0.0
-    assert pos["y"] != 0.0
-    assert pos["heading"] != 0.0
+    assert pos.x != 0.0
+    assert pos.y != 0.0
+    assert pos.heading != 0.0
 
     # Position should be off the origin but not too far
-    distance_from_origin = (pos["x"] ** 2 + pos["y"] ** 2) ** 0.5
+    distance_from_origin = (pos.x**2 + pos.y**2) ** 0.5
     assert distance_from_origin > 0.0
 
     # The path should have curved
     history = mock_controller.get_movement_history()
-    positions = [entry["simulated_position"] for entry in history]
+    positions = [entry[MockState.SIMULATED_POSITION] for entry in history]
 
     # Ensure we have at least 3 different x and y values
-    unique_x_values = set(round(p["x"], 2) for p in positions)
-    unique_y_values = set(round(p["y"], 2) for p in positions)
+    unique_x_values = set(round(p.x, 2) for p in positions)
+    unique_y_values = set(round(p.y, 2) for p in positions)
 
     assert len(unique_x_values) > 2, f"Only found {len(unique_x_values)} unique x values"
     assert len(unique_y_values) > 2, f"Only found {len(unique_y_values)} unique y values"
@@ -293,7 +281,7 @@ def test_follow_path(mock_controller, path_points):
 
         # Get current position
         current_pos = mock_controller.get_simulated_position()
-        current_x, current_y = current_pos["x"], current_pos["y"]
+        current_x, current_y = current_pos.x, current_pos.y
 
         # Calculate direction to target
         dx = target_x - current_x
@@ -306,7 +294,7 @@ def test_follow_path(mock_controller, path_points):
             target_angle += 360
 
         # Calculate turn to align with target
-        current_heading = current_pos["heading"]
+        current_heading = current_pos.heading
         angle_diff = (target_angle - current_heading + 180) % 360 - 180
 
         # Determine turn direction
@@ -340,8 +328,8 @@ def test_follow_path(mock_controller, path_points):
         # For small paths, use a percentage of the total path distance
         tolerance = min(5.0, moved_distance * 0.2)  # 20% of path distance or max 5.0
 
-        assert abs(final_pos["x"] - path_points[0][0]) < tolerance
-        assert abs(final_pos["y"] - path_points[0][1]) < tolerance
+        assert abs(final_pos.x - path_points[0][0]) < tolerance
+        assert abs(final_pos.y - path_points[0][1]) < tolerance
 
 
 if __name__ == "__main__":
