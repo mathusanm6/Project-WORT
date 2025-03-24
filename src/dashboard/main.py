@@ -39,9 +39,6 @@ ACTION_COMMAND_TOPIC = "rasptank/action/command"
 STATUS_TOPIC = "rasptank/status"
 GAME_EVENT_TOPIC = "rasptank/game/event"
 
-# Check if we're on macOS for platform-specific handling
-IS_MACOS = sys.platform == "darwin"
-
 # Global variables
 mqtt_client = None
 dualsense_controller = None
@@ -521,17 +518,12 @@ def main():
         controller_retry_interval = 10.0  # seconds
         last_controller_retry = 0
 
-        # If on macOS, we don't use a separate thread for controller polling
-        if IS_MACOS:
-            logger.info("Running in macOS-compatible mode (controller events on main thread)")
-        else:
-            logger.info("Running with threaded controller polling")
+        logger.info("Running with threaded controller polling")
 
         while running:
             current_time = time.time()
 
-            # On macOS, we need to process pygame events in the main thread
-            if IS_MACOS and dualsense_controller and dualsense_controller.get_status()["connected"]:
+            if dualsense_controller and dualsense_controller.get_status()["connected"]:
                 pygame.event.pump()
                 dualsense_controller._process_events()
 

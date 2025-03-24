@@ -22,7 +22,6 @@ from typing import Dict, List, Optional
 import pygame
 
 from src.dashboard.game_controller.dualsense_controller import DualSenseController
-from src.dashboard.game_controller.dualsense_mapping import IS_MACOS
 
 # Configure logging
 logging.basicConfig(
@@ -144,9 +143,6 @@ def display_controller_status(controller):
     # Connection status
     print(f"Connected: {'Yes' if status['connected'] else 'No'}")
 
-    # Platform info
-    print(f"Platform: {sys.platform} (macOS: {IS_MACOS})")
-
     # Pressed buttons
     pressed_buttons = [name for name, pressed in status["buttons"].items() if pressed]
     print(f"Pressed buttons: {', '.join(pressed_buttons) if pressed_buttons else 'None'}")
@@ -263,10 +259,9 @@ def main():
         while running:
             current_time = time.time()
 
-            # On macOS, process events in the main thread
-            if IS_MACOS:
-                pygame.event.pump()
-                controller._process_events()
+            # Process events in the main thread
+            pygame.event.pump()
+            controller._process_events()
 
             # Handle pygame window events
             for event in pygame.event.get():
