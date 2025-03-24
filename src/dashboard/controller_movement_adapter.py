@@ -251,9 +251,6 @@ class ControllerMovementAdapter:
                     TurnDirection.RIGHT,
                     SHARP_TURN_FACTOR,
                 )
-
-            # Rumble
-            self.controller.on_movement(self.speed_values[self.current_speed_mode])
         else:
             # Handle button release events
             dpad_state = self.controller.get_status()["dpad"]
@@ -382,7 +379,6 @@ class ControllerMovementAdapter:
         # Only send movement command if there's an actual direction
         if thrust_direction is not ThrustDirection.NONE or turn_direction is not TurnDirection.NONE:
             self._send_movement_command(speed, thrust_direction, turn_direction, turn_factor)
-            self.controller.on_movement(speed)
         else:
             # Stop movement if no direction
             self._send_movement_command(
@@ -419,6 +415,13 @@ class ControllerMovementAdapter:
                 f"Movement: speed={speed:.1f}, thrust={thrust_direction.value}, "
                 f"turn={turn_direction.value}, factor={turn_factor:.2f}"
             )
+
+            if speed == 0 or (
+                thrust_direction == ThrustDirection.NONE and turn_direction == TurnDirection.NONE
+            ):
+                self.controller.stop_rumble()
+            else:
+                self.controller.on_movement(speed)
 
     def update_for_battery(self, battery_level):
         """

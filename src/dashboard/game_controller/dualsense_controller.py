@@ -5,7 +5,9 @@ via callbacks.
 """
 
 import logging
+import math
 import sys
+import threading
 import time
 from enum import Enum
 from typing import Callable, Dict, Optional, Tuple
@@ -400,25 +402,93 @@ class DualSenseController(BaseController):
             self.feedback.set_led_color(r, g, b)
             self.feedback.set_rumble(1500, 1500, 200)
 
-    def on_movement(self, speed: Speed) -> None:
-        """
+    def on_movement(self, speed: float) -> None:
+        """Create realistic vehicle movement rumble feedback based on speed.
 
         Args:
-            speed(Speed): Speed enum value
+            speed (float): Speed value (0-100)
         """
+        if not self.has_feedback:
+            return
+
+        # Check if we should stop rumble
+        if speed == 0:
+            self.stop_rumble()
+            return
+
+        # Convert the raw speed value to the appropriate enum if needed
+        if speed <= 80.0:
+            speed_mode = Speed.LOW
+        elif speed <= 90.0:
+            speed_mode = Speed.MEDIUM
+        else:
+            speed_mode = Speed.HIGH
+
+        # Stop any existing rumble thread before starting a new one
+        if hasattr(self, "_rumble_active") and self._rumble_active:
+            self._rumble_active = False
+            if hasattr(self, "_rumble_thread") and self._rumble_thread.is_alive():
+                self._rumble_thread.join(timeout=0.5)
+
+        # Start a new thread for continuous rumble
+        self._rumble_active = True
+        self._rumble_thread = threading.Thread(target=self._continuous_rumble, args=(speed_mode,))
+        self._rumble_thread.daemon = True
+        self._rumble_thread.start()
+
+    def stop_rumble(self):
+        """Stop the rumble effect."""
+        if hasattr(self, "_rumble_active"):
+            self._rumble_active = False
+
+        # Immediately stop the rumble effect
         if self.has_feedback:
-            if speed == Speed.LOW:
-                self.feedback.set_rumble(5000, 5000, 0)
-                time.sleep(0.1)
-                self.feedback.set_rumble(5000, 5000, 0)
-            elif speed == Speed.MEDIUM:
-                self.feedback.set_rumble(20000, 20000, 0)
-                time.sleep(0.1)
-                self.feedback.set_rumble(20000, 20000, 0)
-            else:
-                self.feedback.set_rumble(40000, 40000, 0)
-                time.sleep(0.1)
-                self.feedback.set_rumble(40000, 40000, 0)
+            self.feedback.set_rumble(0, 0, 0)
+
+    def _continuous_rumble(self, speed_mode):
+        """Create a continuous rumble pattern that simulates vehicle movement.
+
+        Args:
+            speed_mode (Speed): The speed enum value
+        """
+        try:
+            # Configure rumble parameters based on speed
+            if speed_mode == Speed.LOW:
+                # Low speed: gentle, slow oscillating rumble (like idle/slow movement)
+                base_intensity = 5000
+                variation = 2000
+                cycle_time = 0.5  # Slower oscillation
+            elif speed_mode == Speed.MEDIUM:
+                # Medium speed: moderate, faster oscillating rumble
+                base_intensity = 15000
+                variation = 5000
+                cycle_time = 0.3  # Medium oscillation
+            else:  # HIGH
+                # High speed: stronger, rapid oscillating rumble
+                base_intensity = 30000
+                variation = 10000
+                cycle_time = 0.15  # Faster oscillation
+
+            # Run the rumble pattern until stopped
+            start_time = time.time()
+            while self._rumble_active:
+                # Create a subtle oscillation in rumble intensity
+                elapsed = time.time() - start_time
+                # Use a sine wave to create smooth oscillation
+                oscillation = math.sin(elapsed * (2 * math.pi / cycle_time))
+                intensity = int(base_intensity + oscillation * variation)
+
+                # Apply the rumble effect
+                self.feedback.set_rumble(intensity, intensity, 50)
+
+                # Short sleep to control update frequency
+                time.sleep(0.05)
+
+        except Exception as e:
+            print(f"Rumble error: {e}")
+        finally:
+            # Ensure rumble is stopped when thread ends
+            self.feedback.set_rumble(0, 0, 0)
 
     def cleanup(self):
         """Clean up resources."""
