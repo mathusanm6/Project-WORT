@@ -408,11 +408,17 @@ class DualSenseController(BaseController):
         """
         if self.has_feedback:
             if speed == Speed.LOW:
-                self.feedback.set_rumble(0, 20000, 0)
+                self.feedback.set_rumble(5000, 5000, 0)
+                time.sleep(0.1)
+                self.feedback.set_rumble(5000, 5000, 0)
             elif speed == Speed.MEDIUM:
-                self.feedback.set_rumble(0, 40000, 0)
+                self.feedback.set_rumble(20000, 20000, 0)
+                time.sleep(0.1)
+                self.feedback.set_rumble(20000, 20000, 0)
             else:
-                self.feedback.set_rumble(0, 65535, 0)
+                self.feedback.set_rumble(40000, 40000, 0)
+                time.sleep(0.1)
+                self.feedback.set_rumble(40000, 40000, 0)
 
     def cleanup(self):
         """Clean up resources."""
