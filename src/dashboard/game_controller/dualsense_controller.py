@@ -7,6 +7,7 @@ via callbacks.
 import logging
 import sys
 import time
+from enum import Enum
 from typing import Callable, Dict, Optional, Tuple
 
 import pygame
@@ -27,6 +28,14 @@ logger = logging.getLogger(__name__)
 
 # Controller Settings
 JOYSTICK_DEAD_ZONE = 0.15  # Pygame joystick values are -1.0 to 1.0
+
+
+class Speed(Enum):
+    """Speed modes for the RaspTank movement adapter."""
+
+    LOW = 80.0
+    MEDIUM = 90.0
+    HIGH = 100.0
 
 
 class DualSenseController(BaseController):
@@ -380,6 +389,30 @@ class DualSenseController(BaseController):
                 self.feedback.set_led_color(0, 0, 0)  # Off
                 time.sleep(0.15)
             self.feedback.set_led_color(r, g, b)
+
+    def speed_changed(self, r: int, g: int, b: int) -> None:
+        """
+
+        Args:
+            color: RGB color tuple (0-255)
+        """
+        if self.has_feedback:
+            self.feedback.set_led_color(r, g, b)
+            self.feedback.set_rumble(1500, 1500, 200)
+
+    def on_movement(self, speed: Speed) -> None:
+        """
+
+        Args:
+            speed(Speed): Speed enum value
+        """
+        if self.has_feedback:
+            if speed == Speed.LOW:
+                self.feedback.set_rumble(0, 20000, 0)
+            elif speed == Speed.MEDIUM:
+                self.feedback.set_rumble(0, 40000, 0)
+            else:
+                self.feedback.set_rumble(0, 65535, 0)
 
     def cleanup(self):
         """Clean up resources."""

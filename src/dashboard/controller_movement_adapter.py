@@ -11,7 +11,7 @@ import time
 from typing import Any, Callable, Dict, Optional
 
 # Import from the new modular controller structure
-from src.dashboard.game_controller.dualsense_controller import DualSenseController
+from src.dashboard.game_controller.dualsense_controller import DualSenseController, Speed
 from src.dashboard.game_controller.events import (
     ButtonType,
     DPadDirection,
@@ -24,9 +24,7 @@ from src.rasptank.movement.movement_api import ThrustDirection, TurnDirection
 logger = logging.getLogger(__name__)
 
 # Movement constants
-MAX_SPEED = 100.0  # Maximum speed percentage
-MEDIUM_SPEED = 90.0  # Medium speed percentage
-LOW_SPEED = 80.0  # Low speed percentage
+
 DEAD_ZONE = 0.20  # Joystick dead zone (increased to 0.2)
 TURN_THRESHOLD = 0.80  # Threshold for sharp turns
 VERTICAL_THRESHOLD = 0.20  # Vertical threshold for Joystick x
@@ -97,7 +95,7 @@ class ControllerMovementAdapter:
 
         # Speed control (changed default to LOW speed)
         self.current_speed_mode = 0  # 0=low, 1=medium, 2=high
-        self.speed_values = [LOW_SPEED, MEDIUM_SPEED, MAX_SPEED]
+        self.speed_values = [Speed.LOW.value, Speed.MEDIUM.value, Speed.HIGH.value]
 
         # Last movement command sent
         self.last_movement = None
@@ -134,9 +132,8 @@ class ControllerMovementAdapter:
                     f"Speed decreased to mode {self.current_speed_mode} ({self.speed_values[self.current_speed_mode]}%)"
                 )
 
-                # Update LED color based on new speed mode if feedback available
-                if self.has_feedback:
-                    self.controller.set_led_color(*SPEED_MODE_COLORS[self.current_speed_mode])
+                # Update LED color based on new speed mode and rumble
+                self.controller.speed_changed(*SPEED_MODE_COLORS[self.current_speed_mode])
 
                 # Update movement with new speed if we're currently moving
                 if self.last_movement and not (
@@ -162,9 +159,8 @@ class ControllerMovementAdapter:
                     f"Speed increased to mode {self.current_speed_mode} ({self.speed_values[self.current_speed_mode]}%)"
                 )
 
-                # Update LED color based on new speed mode if feedback available
-                if self.has_feedback:
-                    self.controller.set_led_color(*SPEED_MODE_COLORS[self.current_speed_mode])
+                # Update LED color based on new speed mode and rumble
+                self.controller.speed_changed(*SPEED_MODE_COLORS[self.current_speed_mode])
 
                 # Update movement with new speed if we're currently moving
                 if self.last_movement and not (
@@ -255,6 +251,9 @@ class ControllerMovementAdapter:
                     TurnDirection.RIGHT,
                     SHARP_TURN_FACTOR,
                 )
+
+            # Rumble
+            self.controller.on_movement(self.speed_values[self.current_speed_mode])
         else:
             # Handle button release events
             dpad_state = self.controller.get_status()["dpad"]
@@ -270,6 +269,7 @@ class ControllerMovementAdapter:
                     self._send_movement_command(
                         0, ThrustDirection.NONE, TurnDirection.NONE, SHARP_TURN_FACTOR
                     )
+                    self.controller.stop_rumble()
 
             elif (
                 direction == DPadDirection.DOWN.value
@@ -281,6 +281,7 @@ class ControllerMovementAdapter:
                     self._send_movement_command(
                         0, ThrustDirection.NONE, TurnDirection.NONE, SHARP_TURN_FACTOR
                     )
+                    self.controller.stop_rumble()
 
             elif (
                 direction == DPadDirection.LEFT.value
@@ -292,6 +293,7 @@ class ControllerMovementAdapter:
                     self._send_movement_command(
                         0, ThrustDirection.NONE, TurnDirection.NONE, SHARP_TURN_FACTOR
                     )
+                    self.controller.stop_rumble()
 
             elif (
                 direction == DPadDirection.RIGHT.value
@@ -303,6 +305,7 @@ class ControllerMovementAdapter:
                     self._send_movement_command(
                         0, ThrustDirection.NONE, TurnDirection.NONE, SHARP_TURN_FACTOR
                     )
+                    self.controller.stop_rumble()
 
     def _process_joystick_to_movement(self):
         """
@@ -379,11 +382,13 @@ class ControllerMovementAdapter:
         # Only send movement command if there's an actual direction
         if thrust_direction is not ThrustDirection.NONE or turn_direction is not TurnDirection.NONE:
             self._send_movement_command(speed, thrust_direction, turn_direction, turn_factor)
+            self.controller.on_movement(speed)
         else:
             # Stop movement if no direction
             self._send_movement_command(
                 0, ThrustDirection.NONE, TurnDirection.NONE, SHARP_TURN_FACTOR
             )
+            self.controller.stop_rumble()
 
     def _send_movement_command(
         self,
@@ -402,7 +407,7 @@ class ControllerMovementAdapter:
             turn_factor (float): Turning factor between 0.0 and 1.0 (affects the sharpness of the turn)
         """
         # Clamp values to valid ranges
-        speed = max(0.0, min(MAX_SPEED, speed))
+        speed = max(0.0, min(Speed.HIGH.value, speed))
 
         # Store current movement
         self.last_movement = (speed, thrust_direction, turn_direction, turn_factor)
