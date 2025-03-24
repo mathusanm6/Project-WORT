@@ -88,7 +88,7 @@ class MQTTMovementController(BaseMovementController):
         logger.info(f"Subscribing to command topic: {self.command_topic}")
         self.mqtt_client.subscribe(
             topic=self.command_topic,
-            qos=1,  # Ensure commands are delivered at least once
+            qos=0,  # Ensure commands are delivered at least once
             callback=self._handle_command,
         )
 
