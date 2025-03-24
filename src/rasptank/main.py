@@ -243,10 +243,10 @@ def main():
             )
 
         # Set up handler for shoot commands
-        mqtt_client.subscribe(topic=SHOOT_COMMAND_TOPIC, qos=1, callback=handle_shoot_command)
+        mqtt_client.subscribe(topic=SHOOT_COMMAND_TOPIC, qos=0, callback=handle_shoot_command)
 
         # Set up handler for camera commands
-        mqtt_client.subscribe(topic=CAMERA_COMMAND_TOPIC, qos=1, callback=handle_camera_command)
+        mqtt_client.subscribe(topic=CAMERA_COMMAND_TOPIC, qos=0, callback=handle_camera_command)
 
         # Start periodic status updates
         publish_status_update()

@@ -80,7 +80,7 @@ def send_movement_command(
 
         # Publish the command
         logger.debug(f"Sending movement command: {message}")
-        mqtt_client.publish(MOVEMENT_COMMAND_TOPIC, message, qos=1)
+        mqtt_client.publish(MOVEMENT_COMMAND_TOPIC, message, qos=0)
 
     except Exception as e:
         logger.error(f"Error sending movement command: {e}")
@@ -117,7 +117,7 @@ def send_action_command(action: str, value: str):
 
         # Publish the command
         logger.debug(f"Sending {action} command: {message}")
-        mqtt_client.publish(topic, message, qos=1)
+        mqtt_client.publish(topic, message, qos=0)
 
     except Exception as e:
         logger.error(f"Error sending {action} command: {e}")
