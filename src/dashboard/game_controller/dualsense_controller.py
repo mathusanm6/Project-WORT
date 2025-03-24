@@ -18,7 +18,6 @@ from src.dashboard.game_controller.dualsense_mapping import (
     BUTTON_MAPPING,
     DPAD_BUTTON_MAPPING,
     DPAD_TYPE,
-    IS_MACOS,
     get_axis_name,
     get_button_name,
 )
@@ -129,14 +128,7 @@ class DualSenseController(BaseController):
         For macOS compatibility, don't use this method - instead call
         _process_events() directly from your main thread.
         """
-        if IS_MACOS:
-            logger.warning(
-                "On macOS, pygame event handling must happen on the main thread. "
-                "Call _process_events() manually from your main thread instead."
-            )
-            return super().start(use_threading=False)
-        else:
-            return super().start(use_threading=True)
+        return super().start(use_threading=False)
 
     def _read_controller_state(self):
         """Read the current state of the DualSense controller."""
