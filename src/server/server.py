@@ -61,7 +61,6 @@ def processData(client, userdata, message):
     global flag
 
     querry = str(message.payload.decode("utf-8")).split(" ")
-
     if message.topic == "init":
         if querry[0] == "INIT":
             if initPhase:
@@ -164,7 +163,7 @@ if __name__ == "__main__":
     scores = {"RED": 0, "BLUE": 0}
 
     client = mqtt.Client()
-    client.connect("192.168.0.100")
+    client.connect("192.168.1.200")
 
     client.subscribe("init")
     client.subscribe("tanks/+/flag")
