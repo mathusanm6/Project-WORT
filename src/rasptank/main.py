@@ -11,12 +11,10 @@ import signal
 import sys
 import threading
 import time
-from typing import Dict, List, Optional
 
 from src.common.mqtt.client import MQTTClient
 from src.common.mqtt.topics import MOVEMENT_COMMAND_TOPIC, MOVEMENT_STATE_TOPIC
 from src.rasptank.movement.controller.mqtt import MQTTMovementController
-from src.rasptank.movement.movement_factory import MovementControllerType, MovementFactory
 
 # Configure logging
 logging.basicConfig(
@@ -186,8 +184,6 @@ def parse_arguments():
 
     parser.add_argument("--port", type=int, default=1883, help="MQTT broker port")
 
-    parser.add_argument("--mock", action="store_true", help="Use mock hardware for testing")
-
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
     parser.add_argument("--client-id", type=str, default="rasptank", help="MQTT client ID")
@@ -226,21 +222,13 @@ def main():
             logger.error("Failed to connect to MQTT broker")
             return 1
 
-        # Initialize movement controller
-        if args.mock:
-            # Use mock controller for testing
-            logger.info("Initializing mock movement controller")
-            movement_controller = MovementFactory.create_movement_controller(
-                controller_type=MovementControllerType.MOCK
-            )
-        else:
-            # Use MQTT movement controller
-            logger.info("Initializing MQTT movement controller")
-            movement_controller = MQTTMovementController(
-                mqtt_client=mqtt_client,
-                command_topic=MOVEMENT_COMMAND_TOPIC,
-                state_topic=MOVEMENT_STATE_TOPIC,
-            )
+        # Initialize MQTT movement controller
+        logger.info("Initializing MQTT movement controller")
+        movement_controller = MQTTMovementController(
+            mqtt_client=mqtt_client,
+            command_topic=MOVEMENT_COMMAND_TOPIC,
+            state_topic=MOVEMENT_STATE_TOPIC,
+        )
 
         # Set up handler for shoot commands
         mqtt_client.subscribe(topic=SHOOT_COMMAND_TOPIC, qos=0, callback=handle_shoot_command)

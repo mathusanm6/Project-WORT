@@ -4,22 +4,29 @@ This controller receives movement commands via MQTT and translates
 them into actual movement commands for the Rasptank.
 """
 
-import json
 import logging
 import threading
-import time
-from typing import Any, Dict, Optional
+from typing import Optional
 
+# Import from src.common
+from src.common.enum.movement import (
+    CurvedTurnRate,
+    SpeedMode,
+    ThrustDirection,
+    TurnDirection,
+    TurnType,
+)
 from src.common.mqtt.client import MQTTClient
 from src.common.mqtt.topics import MOVEMENT_COMMAND_TOPIC, MOVEMENT_STATE_TOPIC
+
+# Import from src.rasptank
 from src.rasptank.movement.controller.base import BaseMovementController
-from src.rasptank.movement.movement_api import State, ThrustDirection, TurnDirection
-from src.rasptank.movement.rasptank_hardware import RasptankHardware, TurnFactor
+from src.rasptank.movement.movement_api import State
+from src.rasptank.movement.rasptank_hardware import RasptankHardware
 
 # Configure logging
 logger = logging.getLogger("MQTTMovementController")
-# Ensure the logger is set to a level that will display your messages
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.INFO)  # Ensure the logger is set to a level that will display your messages
 
 # If the logger doesn't have handlers, add a console handler
 if not logger.handlers:
@@ -55,7 +62,7 @@ class MQTTMovementController(BaseMovementController):
             command_topic (str): Topic to listen for movement commands
             state_topic (str): Topic to publish movement state updates
         """
-        super().__init__()
+        super().__init__()  # Initialize the base class (BaseMovementController) with default state
 
         # Initialize hardware adapter
         self.hardware = RasptankHardware()
@@ -88,7 +95,7 @@ class MQTTMovementController(BaseMovementController):
         logger.info(f"Subscribing to command topic: {self.command_topic}")
         self.mqtt_client.subscribe(
             topic=self.command_topic,
-            qos=0,  # Ensure commands are delivered at least once
+            qos=0,  # QoS 0 for movement command messages
             callback=self._handle_command,
         )
 
@@ -111,21 +118,22 @@ class MQTTMovementController(BaseMovementController):
 
         try:
             # Parse command message
-            # Format: "<speed>;<thrust_direction>;<turn_direction>;<turn_factor>"
+            # Format: "<thrust_direction>;<turn_direction>;<turn_type>;<speed_mode>;<curved_turn_rate>"
             parts = payload.split(";")
 
-            if len(parts) < 3:
+            if len(parts) < 5:
                 logger.warning(f"Invalid command format: {payload}")
                 return
 
             # Extract values
-            speed = float(parts[0])
-            thrust_dir_str = parts[1]
-            turn_dir_str = parts[2]
-            turn_factor = float(parts[3]) if len(parts) > 3 else TurnFactor.MODERATE.value
+            thrust_dir_str = parts[0]
+            turn_dir_str = parts[1]
+            turn_type_str = parts[2]
+            speed_value = int(parts[3])
+            curved_turn_rate_float = float(parts[4])
 
             logger.info(
-                f"Parsed command: speed={speed}, thrust={thrust_dir_str}, turn={turn_dir_str}, factor={turn_factor}"
+                f"Parsed command: thrust_direction={thrust_dir_str}, turn_direction={turn_dir_str}, turn_type={turn_type_str}, speed_value={speed_value}, curved_turn_rate={curved_turn_rate_float}"
             )
 
             # Map string values to enum values
@@ -141,11 +149,29 @@ class MQTTMovementController(BaseMovementController):
                 logger.warning(f"Invalid turn direction: {turn_dir_str}")
                 turn_direction = TurnDirection.NONE
 
+            try:
+                turn_type = TurnType(turn_type_str)
+            except ValueError:
+                logger.warning(f"Invalid turn type: {turn_type_str}")
+                turn_type = TurnType.NONE
+
+            try:
+                speed_mode = SpeedMode(speed_value)
+            except ValueError:
+                logger.warning(f"Invalid speed value: {speed_value}")
+                speed_mode = SpeedMode.STOP
+
+            try:
+                curved_turn_rate = CurvedTurnRate(curved_turn_rate_float)
+            except ValueError:
+                logger.warning(f"Invalid curved turn rate: {curved_turn_rate_float}")
+                curved_turn_rate = CurvedTurnRate.NONE
+
             # Apply the movement
             logger.info(
-                f"Applying movement: {thrust_direction.value}, {turn_direction.value}, {speed}, {turn_factor}"
+                f"Applying movement: thrust_direction={thrust_direction}, turn_direction={turn_direction}, turn_type={turn_type}, speed_mode={speed_mode}, curved_turn_rate={curved_turn_rate}"
             )
-            self.move(thrust_direction, turn_direction, speed, turn_factor)
+            self.move(thrust_direction, turn_direction, turn_type, speed_mode, curved_turn_rate)
 
         except Exception as e:
             logger.error(f"Error handling movement command: {e}", exc_info=True)
@@ -158,42 +184,48 @@ class MQTTMovementController(BaseMovementController):
 
         try:
             state = self.get_state()
-            state_str = f"{state[State.SPEED]};{state[State.THRUST_DIRECTION]};{state[State.TURN_DIRECTION]};{state[State.TURN_FACTOR]}"
+            # Format: "<thrust_direction>;<turn_direction>;<turn_type>;<speed_mode>;<curved_turn_rate>"
+            state_str = f"{state.thrust_direction};{state.turn_direction};{state.turn_type};{state.speed_mode};{state.curved_turn_rate}"
 
             logger.info(f"Publishing movement state: {state_str}")
             self.mqtt_client.publish(
                 topic=self.state_topic,
                 payload=state_str,
-                qos=0,  # State updates can use QoS 0 for better performance
+                qos=0,  # QoS 0 for movement state messages
             )
         except Exception as e:
             logger.error(f"Error publishing movement state: {e}", exc_info=True)
 
+    # Override _apply_movement method from BaseMovementController
     def _apply_movement(
         self,
         thrust_direction: ThrustDirection,
         turn_direction: TurnDirection,
-        speed: float,
-        turn_factor: float,
-    ) -> Dict[State, Any]:
+        turn_type: TurnType,
+        speed_mode: SpeedMode,
+        curved_turn_rate: CurvedTurnRate,
+    ) -> State:
         # Log before applying movement
         logger.info(
-            f"Sending to hardware: thrust={thrust_direction}, turn={turn_direction}, speed={speed}, turn_factor={turn_factor}"
+            f"Sending to hardware: thrust_direction={thrust_direction}, turn_direction={turn_direction}, turn_type={turn_type}, speed_mode={speed_mode}, curved_turn_rate={curved_turn_rate}"
         )
 
         # Apply movement to hardware
-        self.hardware.move_hardware(thrust_direction, turn_direction, speed, turn_factor)
+        self.hardware.move_hardware(
+            thrust_direction, turn_direction, turn_type, speed_mode, curved_turn_rate
+        )
 
         # Log after applying movement
         logger.info("Movement applied to hardware")
 
         # Update and return current state
-        self._state = {
-            "thrust_direction": thrust_direction,
-            "turn_direction": turn_direction,
-            "speed": speed,
-            "turn_factor": turn_factor,
-        }
+        self._state = State(
+            thrust_direction=thrust_direction,
+            turn_direction=turn_direction,
+            turn_type=turn_type,
+            speed_mode=speed_mode,
+            curved_turn_rate=curved_turn_rate,
+        )
 
         return self._state
 

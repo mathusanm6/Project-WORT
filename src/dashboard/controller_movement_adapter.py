@@ -7,39 +7,33 @@ compatible with the RaspTank hardware implementation.
 
 import logging
 import math
-import time
 from typing import Any, Callable, Dict, Optional
 
+# Import from src.common
+from src.common.constants.controller import (
+    JOYSTICK_DEAD_ZONE,
+    JOYSTICK_HORIZONTAL_THRESHOLD,
+    JOYSTICK_VERTICAL_THRESHOLD,
+)
+from src.common.enum.movement import (
+    CurvedTurnRate,
+    SpeedMode,
+    ThrustDirection,
+    TurnDirection,
+    TurnType,
+)
+
 # Import from the new modular controller structure
-from src.dashboard.game_controller.dualsense_controller import DualSenseController, Speed
+from src.dashboard.game_controller.dualsense_controller import DualSenseController
 from src.dashboard.game_controller.events import (
     ButtonType,
     DPadDirection,
     JoystickType,
     TriggerType,
 )
-from src.rasptank.movement.movement_api import ThrustDirection, TurnDirection
 
 # Configure logging
 logger = logging.getLogger(__name__)
-
-# Movement constants
-
-DEAD_ZONE = 0.20  # Joystick dead zone (increased to 0.2)
-TURN_THRESHOLD = 0.80  # Threshold for sharp turns
-VERTICAL_THRESHOLD = 0.20  # Vertical threshold for Joystick x
-HORIZONTAL_THRESHOLD = 0.20  # Horizontal threshold for Joystick y
-
-# Turn factors
-MODERATE_TURN_FACTOR = 0.60  # Moderate turn factor
-SHARP_TURN_FACTOR = 1.0  # Sharp turn factor
-
-# Speed mode color mapping
-SPEED_MODE_COLORS = {
-    0: (0, 255, 0),  # Low speed: Green
-    1: (255, 255, 0),  # Medium speed: Yellow
-    2: (255, 0, 0),  # High speed: Red
-}
 
 
 class ControllerMovementAdapter:
@@ -93,20 +87,34 @@ class ControllerMovementAdapter:
         self.joystick_right_x = 0.0
         self.joystick_right_y = 0.0
 
-        # Speed control (changed default to LOW speed)
-        self.current_speed_mode = 0  # 0=low, 1=medium, 2=high
-        self.speed_values = [Speed.LOW.value, Speed.MEDIUM.value, Speed.HIGH.value]
+        # Pivot mode
+        self.pivot_mode = False
+
+        # Track active D-pad directions for pivot mode updates
+        self.active_dpad_directions = {
+            DPadDirection.UP.value: False,
+            DPadDirection.DOWN.value: False,
+            DPadDirection.LEFT.value: False,
+            DPadDirection.RIGHT.value: False,
+        }
+
+        # Speed control
+        self.speed_modes = SpeedMode.get_speed_modes()  # Get all speed modes except STOP
+        self.speed_values = (
+            SpeedMode.get_speed_values()
+        )  # Get the speed values for all speed modes except STOP
+        self.current_speed_mode_idx = len(self.speed_values) // 2  # Start in the middle speed mode
 
         # Last movement command sent
         self.last_movement = None
 
         # Set initial LED color based on speed mode if feedback available
         if self.has_feedback:
-            self.controller.set_led_color(*SPEED_MODE_COLORS[self.current_speed_mode])
+            self.controller.set_led_color(*self.speed_modes[self.current_speed_mode_idx].color)
 
         logger.info("RaspTank Movement Adapter initialized with improved control scheme")
         logger.info(
-            f"Initial speed mode: {self.current_speed_mode} (LOW - {self.speed_values[self.current_speed_mode]}%)"
+            f"Initial speed mode: {self.current_speed_mode_idx} (LOW - {self.speed_values[self.current_speed_mode_idx]}%)"
         )
 
     def _handle_button_event(self, button_name, pressed):
@@ -121,60 +129,116 @@ class ControllerMovementAdapter:
         logger.debug(f"Button event: {button_name} {'pressed' if pressed else 'released'}")
 
         # Handle speed control with L1 button (decrease speed)
-        if button_name == "L1" and pressed:
+        if button_name == ButtonType.L1.value and pressed:
             # Print current speed mode for debugging
-            logger.info(f"L1 pressed. Current speed mode before: {self.current_speed_mode}")
+            logger.info(f"L1 pressed. Current speed mode before: {self.current_speed_mode_idx}")
 
             # Decrease speed mode (without wrap-around)
-            if self.current_speed_mode > 0:
-                self.current_speed_mode -= 1
+            if self.current_speed_mode_idx > 0:
+                self.current_speed_mode_idx -= 1
                 logger.info(
-                    f"Speed decreased to mode {self.current_speed_mode} ({self.speed_values[self.current_speed_mode]}%)"
+                    f"Speed decreased to mode {self.current_speed_mode_idx} ({self.speed_values[self.current_speed_mode_idx]}%)"
                 )
 
                 # Update LED color based on new speed mode and rumble
-                self.controller.speed_changed(*SPEED_MODE_COLORS[self.current_speed_mode])
+                if self.has_feedback:
+                    self.controller.feedback_collection.on_speed_change(
+                        *self.speed_modes[self.current_speed_mode_idx].color
+                    )
 
                 # Update movement with new speed if we're currently moving
                 if self.last_movement and not (
-                    self.last_movement[1] is ThrustDirection.NONE
-                    and self.last_movement[2] is TurnDirection.NONE
+                    self.last_movement[0] is ThrustDirection.NONE
+                    and self.last_movement[1] is TurnDirection.NONE
                 ):
                     self._process_joystick_to_movement()
+
+                    # Also update any active D-pad movements with the new speed
+                    self._update_active_dpad_movements()
             else:
                 logger.info("Already at the lowest speed mode")
-                self.controller.speed_out_of_bound(*SPEED_MODE_COLORS[self.current_speed_mode])
+                if self.has_feedback:
+                    self.controller.feedback_collection.on_speed_out_of_bound(
+                        *self.speed_modes[self.current_speed_mode_idx].color
+                    )
 
-            logger.info(f"L1 pressed. Speed mode after: {self.current_speed_mode}")
+            logger.info(f"L1 pressed. Speed mode after: {self.current_speed_mode_idx}")
 
         # Handle speed control with R1 button (increase speed)
-        elif button_name == "R1" and pressed:
+        elif button_name == ButtonType.R1.value and pressed:
             # Print current speed mode for debugging
-            logger.info(f"R1 pressed. Current speed mode before: {self.current_speed_mode}")
+            logger.info(f"R1 pressed. Current speed mode before: {self.current_speed_mode_idx}")
 
             # Increase speed mode (without wrap-around)
-            if self.current_speed_mode < len(self.speed_values) - 1:
-                self.current_speed_mode += 1
+            if self.current_speed_mode_idx < len(self.speed_values) - 1:
+                self.current_speed_mode_idx += 1
                 logger.info(
-                    f"Speed increased to mode {self.current_speed_mode} ({self.speed_values[self.current_speed_mode]}%)"
+                    f"Speed increased to mode {self.current_speed_mode_idx} ({self.speed_values[self.current_speed_mode_idx]}%)"
                 )
 
                 # Update LED color based on new speed mode and rumble
-                self.controller.speed_changed(*SPEED_MODE_COLORS[self.current_speed_mode])
+                if self.has_feedback:
+                    self.controller.feedback_collection.on_speed_change(
+                        *self.speed_modes[self.current_speed_mode_idx].color
+                    )
 
                 # Update movement with new speed if we're currently moving
                 if self.last_movement and not (
-                    self.last_movement[1] is ThrustDirection.NONE
-                    and self.last_movement[2] is TurnDirection.NONE
+                    self.last_movement[0] is ThrustDirection.NONE
+                    and self.last_movement[1] is TurnDirection.NONE
                 ):
                     self._process_joystick_to_movement()
+
+                    # Also update any active D-pad movements with the new speed
+                    self._update_active_dpad_movements()
             else:
                 logger.info("Already at the highest speed mode")
-                self.controller.speed_out_of_bound(*SPEED_MODE_COLORS[self.current_speed_mode])
+                if self.has_feedback:
+                    self.controller.feedback_collection.on_speed_out_of_bound(
+                        *self.speed_modes[self.current_speed_mode_idx].color
+                    )
 
-            logger.info(f"R1 pressed. Speed mode after: {self.current_speed_mode}")
+            logger.info(f"R1 pressed. Speed mode after: {self.current_speed_mode_idx}")
 
         # Other buttons are not used for movement
+
+    def _update_active_dpad_movements(self):
+        """Update any active D-pad movements with the current pivot mode and speed."""
+        dpad_state = self.controller.get_status()["dpad"]
+
+        # First check each direction
+        if dpad_state["up"] and self.active_dpad_directions[DPadDirection.UP.value]:
+            self._send_movement_command(
+                ThrustDirection.FORWARD,
+                TurnDirection.NONE,
+                TurnType.NONE,
+                self.speed_modes[self.current_speed_mode_idx],
+                CurvedTurnRate.NONE,
+            )
+        elif dpad_state["down"] and self.active_dpad_directions[DPadDirection.DOWN.value]:
+            self._send_movement_command(
+                ThrustDirection.BACKWARD,
+                TurnDirection.NONE,
+                TurnType.NONE,
+                self.speed_modes[self.current_speed_mode_idx],
+                CurvedTurnRate.NONE,
+            )
+        elif dpad_state["left"] and self.active_dpad_directions[DPadDirection.LEFT.value]:
+            self._send_movement_command(
+                ThrustDirection.NONE,
+                TurnDirection.LEFT,
+                TurnType.PIVOT if self.pivot_mode else TurnType.SPIN,
+                self.speed_modes[self.current_speed_mode_idx],
+                CurvedTurnRate.NONE,
+            )
+        elif dpad_state["right"] and self.active_dpad_directions[DPadDirection.RIGHT.value]:
+            self._send_movement_command(
+                ThrustDirection.NONE,
+                TurnDirection.RIGHT,
+                TurnType.PIVOT if self.pivot_mode else TurnType.SPIN,
+                self.speed_modes[self.current_speed_mode_idx],
+                CurvedTurnRate.NONE,
+            )
 
     def _handle_joystick_event(self, joystick_name, x_value, y_value):
         """
@@ -197,8 +261,10 @@ class ControllerMovementAdapter:
             self.joystick_right_y = y_value
 
             # Process right joystick for camera movement
-            if self.on_action_command and (abs(x_value) > DEAD_ZONE or abs(y_value) > DEAD_ZONE):
-                self.on_action_command("camera", f"{x_value:.2f};{y_value:.2f}")
+            # if self.on_action_command and (
+            #     abs(x_value) > JOYSTICK_DEAD_ZONE or abs(y_value) > JOYSTICK_DEAD_ZONE
+            # ):
+            #     self.on_action_command("camera", f"{x_value:.2f};{y_value:.2f}")
 
     def _handle_trigger_event(self, trigger_name, value):
         """
@@ -211,7 +277,23 @@ class ControllerMovementAdapter:
         if trigger_name == TriggerType.R2.value and value > 0.5:
             # R2 for shooting or other action
             if self.on_action_command:
-                self.on_action_command("shoot", f"{value * 100:.0f}")
+                self.on_action_command("shoot")
+        elif trigger_name == TriggerType.L2.value:
+            old_pivot_mode = self.pivot_mode
+
+            if value > 0.5:
+                # L2 for activating pivot turn
+                self.pivot_mode = True
+            else:
+                # L2 released
+                self.pivot_mode = False
+
+            # If pivot mode changed and we're turning with D-pad, update the movement command
+            if old_pivot_mode != self.pivot_mode:
+                logger.debug(f"Pivot mode changed to {self.pivot_mode}")
+
+                # Update any active D-pad directional movements to use the new turn type
+                self._update_active_dpad_movements()
 
     def _handle_dpad_event(self, direction, pressed):
         """
@@ -221,35 +303,42 @@ class ControllerMovementAdapter:
             direction (str): D-pad direction ("up", "down", "left", "right")
             pressed (bool): Whether the direction is pressed
         """
+        # Update the active direction tracking
+        self.active_dpad_directions[direction] = pressed
+
         if pressed:
             # Handle button press events
             if direction == DPadDirection.UP.value:
                 self._send_movement_command(
-                    self.speed_values[self.current_speed_mode],
                     ThrustDirection.FORWARD,
                     TurnDirection.NONE,
-                    SHARP_TURN_FACTOR,
+                    TurnType.NONE,
+                    self.speed_modes[self.current_speed_mode_idx],
+                    CurvedTurnRate.NONE,
                 )
             elif direction == DPadDirection.DOWN.value:
                 self._send_movement_command(
-                    self.speed_values[self.current_speed_mode],
                     ThrustDirection.BACKWARD,
                     TurnDirection.NONE,
-                    SHARP_TURN_FACTOR,
+                    TurnType.NONE,
+                    self.speed_modes[self.current_speed_mode_idx],
+                    CurvedTurnRate.NONE,
                 )
             elif direction == DPadDirection.LEFT.value:
                 self._send_movement_command(
-                    self.speed_values[self.current_speed_mode],
                     ThrustDirection.NONE,
                     TurnDirection.LEFT,
-                    SHARP_TURN_FACTOR,
+                    TurnType.PIVOT if self.pivot_mode else TurnType.SPIN,
+                    self.speed_modes[self.current_speed_mode_idx],
+                    CurvedTurnRate.NONE,
                 )
             elif direction == DPadDirection.RIGHT.value:
                 self._send_movement_command(
-                    self.speed_values[self.current_speed_mode],
                     ThrustDirection.NONE,
                     TurnDirection.RIGHT,
-                    SHARP_TURN_FACTOR,
+                    TurnType.PIVOT if self.pivot_mode else TurnType.SPIN,
+                    self.speed_modes[self.current_speed_mode_idx],
+                    CurvedTurnRate.NONE,
                 )
         else:
             # Handle button release events
@@ -259,50 +348,62 @@ class ControllerMovementAdapter:
             if (
                 direction == DPadDirection.UP.value
                 and self.last_movement
-                and self.last_movement[1] is ThrustDirection.FORWARD
+                and self.last_movement[0] is ThrustDirection.FORWARD
             ):
                 # If up is released and was controlling forward movement, stop if no other relevant button is pressed
                 if not dpad_state["up"]:
                     self._send_movement_command(
-                        0, ThrustDirection.NONE, TurnDirection.NONE, SHARP_TURN_FACTOR
+                        ThrustDirection.NONE,
+                        TurnDirection.NONE,
+                        TurnType.NONE,
+                        SpeedMode.STOP,
+                        CurvedTurnRate.NONE,
                     )
-                    self.controller.stop_rumble()
 
             elif (
                 direction == DPadDirection.DOWN.value
                 and self.last_movement
-                and self.last_movement[1] is ThrustDirection.BACKWARD
+                and self.last_movement[0] is ThrustDirection.BACKWARD
             ):
                 # If down is released and was controlling backward movement, stop if no other relevant button is pressed
                 if not dpad_state["down"]:
                     self._send_movement_command(
-                        0, ThrustDirection.NONE, TurnDirection.NONE, SHARP_TURN_FACTOR
+                        ThrustDirection.NONE,
+                        TurnDirection.NONE,
+                        TurnType.NONE,
+                        SpeedMode.STOP,
+                        CurvedTurnRate.NONE,
                     )
-                    self.controller.stop_rumble()
 
             elif (
                 direction == DPadDirection.LEFT.value
                 and self.last_movement
-                and self.last_movement[2] is TurnDirection.LEFT
+                and self.last_movement[1] is TurnDirection.LEFT
             ):
                 # If left is released and was controlling turning, stop if no other relevant button is pressed
                 if not dpad_state["left"]:
                     self._send_movement_command(
-                        0, ThrustDirection.NONE, TurnDirection.NONE, SHARP_TURN_FACTOR
+                        ThrustDirection.NONE,
+                        TurnDirection.NONE,
+                        TurnType.NONE,
+                        SpeedMode.STOP,
+                        CurvedTurnRate.NONE,
                     )
-                    self.controller.stop_rumble()
 
             elif (
                 direction == DPadDirection.RIGHT.value
                 and self.last_movement
-                and self.last_movement[2] is TurnDirection.RIGHT
+                and self.last_movement[1] is TurnDirection.RIGHT
             ):
                 # If right is released and was controlling turning, stop if no other relevant button is pressed
                 if not dpad_state["right"]:
                     self._send_movement_command(
-                        0, ThrustDirection.NONE, TurnDirection.NONE, SHARP_TURN_FACTOR
+                        ThrustDirection.NONE,
+                        TurnDirection.NONE,
+                        TurnType.NONE,
+                        SpeedMode.STOP,
+                        CurvedTurnRate.NONE,
                     )
-                    self.controller.stop_rumble()
 
     def _process_joystick_to_movement(self):
         """
@@ -316,112 +417,125 @@ class ControllerMovementAdapter:
         magnitude = math.sqrt(x * x + y * y)
 
         # Apply dead zone based on magnitude
-        if magnitude < DEAD_ZONE:
-            x, y = 0.0, 0.0
-            magnitude = 0.0
+        if magnitude < JOYSTICK_DEAD_ZONE:
+            # Stop movement if we're inside the dead zone and not already stopped
+            if self.last_movement and not (
+                self.last_movement[0] is ThrustDirection.NONE
+                and self.last_movement[1] is TurnDirection.NONE
+            ):
+                # Stop movement if we're inside the dead zone
+                self._send_movement_command(
+                    ThrustDirection.NONE,
+                    TurnDirection.NONE,
+                    TurnType.NONE,
+                    SpeedMode.STOP,
+                    CurvedTurnRate.NONE,
+                )
 
-        # Determine direction based on joystick angle if we're outside the dead zone
-        if magnitude > 0:
-            # Calculate angle in degrees (0° is forward, 90° is right, etc.)
-            angle = math.degrees(math.atan2(x, y))  # atan2 gives better quadrant handling
+            return
 
-            # Define directional zones as angles
-            # Forward: -45° to 45°
-            # Right: 45° to 135°
-            # Backward: 135° to 225° (or -135° to -225°)
-            # Left: 225° to 315° (or -135° to -45°)
-
-            # Determine thrust direction based on angle
-            if -45 <= angle <= 45:
-                thrust_direction = ThrustDirection.FORWARD
-                turn_direction = TurnDirection.NONE
-            elif 135 <= angle <= 225 or -225 <= angle <= -135:
-                thrust_direction = ThrustDirection.BACKWARD
-                turn_direction = TurnDirection.NONE
-            else:
-                thrust_direction = ThrustDirection.NONE
-
-                # Determine turn direction
-                if 45 < angle < 135:
-                    turn_direction = TurnDirection.RIGHT
-                else:  # 225° to 315° or -135° to -45°
-                    turn_direction = TurnDirection.LEFT
-
-            # For diagonal movement, combine thrust and turn
-            if abs(abs(angle) - 45) < 30:  # Forward-right or forward-left
-                thrust_direction = ThrustDirection.FORWARD
-                turn_direction = TurnDirection.RIGHT if angle > 0 else TurnDirection.LEFT
-            elif abs(abs(angle) - 135) < 30:  # Backward-right or backward-left
-                thrust_direction = ThrustDirection.BACKWARD
-                turn_direction = TurnDirection.RIGHT if angle > 0 else TurnDirection.LEFT
+        if y > JOYSTICK_VERTICAL_THRESHOLD:
+            # Forward
+            thrust_direction = ThrustDirection.FORWARD
+        elif y < -JOYSTICK_VERTICAL_THRESHOLD:
+            # Backward
+            thrust_direction = ThrustDirection.BACKWARD
         else:
-            # No input (inside dead zone)
             thrust_direction = ThrustDirection.NONE
+
+        if x > JOYSTICK_HORIZONTAL_THRESHOLD:
+            # Right
+            turn_direction = TurnDirection.RIGHT
+        elif x < -JOYSTICK_HORIZONTAL_THRESHOLD:
+            # Left
+            turn_direction = TurnDirection.LEFT
+        else:
             turn_direction = TurnDirection.NONE
 
-        # Get speed from current speed mode
-        speed = self.speed_values[self.current_speed_mode]
+        # Only curve turn when using left joystick
+        turn_type = TurnType.CURVE
 
-        # Calculate turn factor based on magnitude for more precise control
+        speed_mode = self.speed_modes[self.current_speed_mode_idx]
+
         if turn_direction is not TurnDirection.NONE:
-            # Map the magnitude to turn factor, preserving the sharp vs moderate logic
-            if magnitude > TURN_THRESHOLD:
-                turn_factor = SHARP_TURN_FACTOR
-            else:
-                # Scale turn factor based on magnitude
-                normalized_magnitude = (magnitude - DEAD_ZONE) / (TURN_THRESHOLD - DEAD_ZONE)
-                turn_factor = MODERATE_TURN_FACTOR * normalized_magnitude + 0.3 * (
-                    1 - normalized_magnitude
-                )
+            # Calculate curved turn rate using CurvedTurnRate and angles
+            angle = math.atan2(y, x) * 180 / math.pi  # Angle in degrees
+            deviation = abs(abs(angle) - 90)  # Deviation from straight (90° is sharpest turn)
+            # Map deviation to the nearest valid CurvedTurnRate value
+            valid_rates = CurvedTurnRate.get_curved_turn_rate_values()
+            closest_rate = min(valid_rates, key=lambda rate: abs(rate - (deviation / 90)))
+            curved_turn_rate = CurvedTurnRate(closest_rate)
         else:
-            turn_factor = SHARP_TURN_FACTOR  # No turning
+            turn_type = TurnType.NONE
+            curved_turn_rate = CurvedTurnRate.NONE
+
+        if turn_direction is not TurnDirection.NONE and thrust_direction is ThrustDirection.NONE:
+            # Only turn in place if not moving forward or backward
+            turn_type = TurnType.SPIN
+            curved_turn_rate = CurvedTurnRate.NONE
 
         # Only send movement command if there's an actual direction
         if thrust_direction is not ThrustDirection.NONE or turn_direction is not TurnDirection.NONE:
-            self._send_movement_command(speed, thrust_direction, turn_direction, turn_factor)
-        else:
-            # Stop movement if no direction
             self._send_movement_command(
-                0, ThrustDirection.NONE, TurnDirection.NONE, SHARP_TURN_FACTOR
+                thrust_direction, turn_direction, turn_type, speed_mode, curved_turn_rate
             )
-            self.controller.stop_rumble()
+        else:
+            # Stop movement if not already stopped
+            if self.last_movement and not (
+                self.last_movement[0] is ThrustDirection.NONE
+                and self.last_movement[1] is TurnDirection.NONE
+            ):
+                # Stop movement if we're inside the dead zone
+                self._send_movement_command(
+                    ThrustDirection.NONE,
+                    TurnDirection.NONE,
+                    TurnType.NONE,
+                    SpeedMode.STOP,
+                    CurvedTurnRate.NONE,
+                )
+
+            return
 
     def _send_movement_command(
         self,
-        speed: float,
         thrust_direction: ThrustDirection,
         turn_direction: TurnDirection,
-        turn_factor: float,
+        turn_type: TurnType,
+        speed_mode: SpeedMode,
+        curved_turn_rate: CurvedTurnRate,
     ):
         """
         Send a movement command to the RaspTank.
 
         Args:
-            speed (float): Speed factor between 0.0 and 100.0
             thrust_direction (ThrustDirection): Thrust direction
             turn_direction (TurnDirection): Turn direction
-            turn_factor (float): Turning factor between 0.0 and 1.0 (affects the sharpness of the turn)
+            turn_type (TurnType): Turn type
+            speed (Speed): Speed factor
+            curved_turn_rate (CurvedTurnRate): Rate of turn for CURVE turn type (0.0 to 1.0 with 0.0 being no curve)
         """
-        # Clamp values to valid ranges
-        speed = max(0.0, min(Speed.HIGH.value, speed))
-
         # Store current movement
-        self.last_movement = (speed, thrust_direction, turn_direction, turn_factor)
+        self.last_movement = (
+            thrust_direction,
+            turn_direction,
+            turn_type,
+            speed_mode,
+            curved_turn_rate,
+        )
 
         # Notify external systems via callback
         if self.on_movement_command:
-            self.on_movement_command(speed, thrust_direction, turn_direction, turn_factor)
+            self.on_movement_command(
+                thrust_direction, turn_direction, turn_type, speed_mode, curved_turn_rate
+            )
             logger.debug(
-                f"Movement: speed={speed:.1f}, thrust={thrust_direction.value}, "
-                f"turn={turn_direction.value}, factor={turn_factor:.2f}"
+                f"Movement command sent: Thrust Direction: {thrust_direction}, Turn Direction: {turn_direction}, Turn Type: {turn_type}, Speed Mode: {speed_mode}, Curved Turn Rate: {curved_turn_rate}"
             )
 
-            if speed == 0 or (
-                thrust_direction == ThrustDirection.NONE and turn_direction == TurnDirection.NONE
-            ):
-                self.controller.stop_rumble()
-            else:
-                self.controller.on_movement(speed)
+            if self.has_feedback:
+                self.controller.feedback_collection.on_move(
+                    thrust_direction, turn_direction, turn_type, speed_mode, curved_turn_rate
+                )
 
     def update_for_battery(self, battery_level):
         """
@@ -435,16 +549,18 @@ class ControllerMovementAdapter:
         """
         if self.has_feedback:
             # Returns True if battery warning is active, False otherwise
-            return self.controller.update_feedback_for_battery(battery_level)
+            return self.controller.feedback_collection.update_for_battery(battery_level)
         return False
 
     def stop(self):
         """Stop all movement immediately."""
-        self._send_movement_command(0, ThrustDirection.NONE, TurnDirection.NONE, SHARP_TURN_FACTOR)
-
-        # Stop any active rumble
-        if self.has_feedback:
-            self.controller.stop_rumble()
+        self._send_movement_command(
+            ThrustDirection.NONE,
+            TurnDirection.NONE,
+            TurnType.NONE,
+            SpeedMode.STOP,
+            CurvedTurnRate.NONE,
+        )
 
         logger.info("Movement stopped")
 
@@ -459,7 +575,10 @@ class ControllerMovementAdapter:
             "controller_connected": self.controller.get_status()["connected"],
             "last_movement": self.last_movement,
             "joystick_position": (self.joystick_left_x, self.joystick_left_y),
-            "speed_mode": self.current_speed_mode,
-            "current_speed": self.speed_values[self.current_speed_mode],
+            "current_speed_mode_idx": self.current_speed_mode_idx,
+            "current_speed_mode": self.speed_modes[self.current_speed_mode_idx],
+            "current_speed_value": self.speed_values[self.current_speed_mode_idx],
             "has_feedback": self.has_feedback,
+            "pivot_mode": self.pivot_mode,
+            "active_dpad_directions": self.active_dpad_directions,
         }

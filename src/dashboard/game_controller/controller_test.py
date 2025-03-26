@@ -14,13 +14,13 @@ This improved version:
 
 import argparse
 import logging
-import os
 import sys
 import time
-from typing import Dict, List, Optional
+from typing import List
 
 import pygame
 
+# Import from src.dashboard
 from src.dashboard.game_controller.dualsense_controller import DualSenseController
 
 # Configure logging

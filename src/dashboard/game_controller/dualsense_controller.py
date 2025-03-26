@@ -5,20 +5,17 @@ via callbacks.
 """
 
 import logging
-import math
-import sys
-import threading
-import time
-from enum import Enum
-from typing import Callable, Dict, Optional, Tuple
+from typing import Callable, Dict, Optional
 
-import pygame
+# Import from src.common
+from src.common.constants.controller import JOYSTICK_DEAD_ZONE
 
+# Import from src.dashboard
 from src.dashboard.game_controller.controller_base import BaseController
 from src.dashboard.game_controller.dualsense_feedback import DualSenseFeedback
+from src.dashboard.game_controller.dualsense_feedback_collection import DualsenseFeedbackCollection
 from src.dashboard.game_controller.dualsense_mapping import (
     AXIS_MAPPING,
-    BUTTON_MAPPING,
     DPAD_BUTTON_MAPPING,
     DPAD_TYPE,
     get_axis_name,
@@ -27,17 +24,6 @@ from src.dashboard.game_controller.dualsense_mapping import (
 
 # Configure logging
 logger = logging.getLogger(__name__)
-
-# Controller Settings
-JOYSTICK_DEAD_ZONE = 0.15  # Pygame joystick values are -1.0 to 1.0
-
-
-class Speed(Enum):
-    """Speed modes for the RaspTank movement adapter."""
-
-    LOW = 80.0
-    MEDIUM = 90.0
-    HIGH = 100.0
 
 
 class DualSenseController(BaseController):
@@ -92,6 +78,7 @@ class DualSenseController(BaseController):
         if enable_feedback:
             try:
                 self.feedback = DualSenseFeedback()
+                self.feedback_collection = DualsenseFeedbackCollection(self.feedback)
                 self.has_feedback = self.feedback.initialized
                 if self.has_feedback:
                     logger.info("DualSense LED and rumble feedback enabled")
@@ -135,11 +122,10 @@ class DualSenseController(BaseController):
     def start(self):
         """Start listening for controller events.
 
-        On macOS, pygame event handling must happen on the main thread.
-        For macOS compatibility, don't use this method - instead call
-        _process_events() directly from your main thread.
+        Returns:
+            bool: True if the controller is successfully initialized
         """
-        return super().start(use_threading=False)
+        return super().start(use_threading=True)
 
     def _read_controller_state(self):
         """Read the current state of the DualSense controller."""
@@ -168,7 +154,7 @@ class DualSenseController(BaseController):
                 self.axis_states[i] = self.joystick.get_axis(i)
 
                 # Check if there's a significant change in axis value
-                if abs(self.axis_states[i] - self.prev_axis_states.get(i, 0.0)) > 0.05:
+                if abs(self.axis_states[i] - self.prev_axis_states.get(i, 0.0)) > 0.01:
                     self._handle_axis(i, self.axis_states[i])
 
             # Try to read hat (D-pad) if available and we're using hat mode
@@ -375,120 +361,6 @@ class DualSenseController(BaseController):
         """Stop any active rumble effects."""
         if self.has_feedback:
             self.feedback.stop_rumble()
-
-    def speed_out_of_bound(self, r: int, g: int, b: int) -> None:
-        """
-
-        Args:
-            color: RGB color tuple (0-255)
-        """
-        if self.has_feedback:
-            for _ in range(3):
-                self.feedback.set_rumble(65535, 65535, 200)
-                self.feedback.set_led_color(r, g, b)
-                time.sleep(0.15)
-                self.feedback.set_rumble(0, 0, 200)
-                self.feedback.set_led_color(0, 0, 0)  # Off
-                time.sleep(0.15)
-            self.feedback.set_led_color(r, g, b)
-
-    def speed_changed(self, r: int, g: int, b: int) -> None:
-        """
-
-        Args:
-            color: RGB color tuple (0-255)
-        """
-        if self.has_feedback:
-            self.feedback.set_led_color(r, g, b)
-            self.feedback.set_rumble(1500, 1500, 200)
-
-    def on_movement(self, speed: float) -> None:
-        """Create realistic vehicle movement rumble feedback based on speed.
-
-        Args:
-            speed (float): Speed value (0-100)
-        """
-        if not self.has_feedback:
-            return
-
-        # Check if we should stop rumble
-        if speed == 0:
-            self.stop_rumble()
-            return
-
-        # Convert the raw speed value to the appropriate enum if needed
-        if speed <= 80.0:
-            speed_mode = Speed.LOW
-        elif speed <= 90.0:
-            speed_mode = Speed.MEDIUM
-        else:
-            speed_mode = Speed.HIGH
-
-        # Stop any existing rumble thread before starting a new one
-        if hasattr(self, "_rumble_active") and self._rumble_active:
-            self._rumble_active = False
-            if hasattr(self, "_rumble_thread") and self._rumble_thread.is_alive():
-                self._rumble_thread.join(timeout=0.5)
-
-        # Start a new thread for continuous rumble
-        self._rumble_active = True
-        self._rumble_thread = threading.Thread(target=self._continuous_rumble, args=(speed_mode,))
-        self._rumble_thread.daemon = True
-        self._rumble_thread.start()
-
-    def stop_rumble(self):
-        """Stop the rumble effect."""
-        if hasattr(self, "_rumble_active"):
-            self._rumble_active = False
-
-        # Immediately stop the rumble effect
-        if self.has_feedback:
-            self.feedback.set_rumble(0, 0, 0)
-
-    def _continuous_rumble(self, speed_mode):
-        """Create a continuous rumble pattern that simulates vehicle movement.
-
-        Args:
-            speed_mode (Speed): The speed enum value
-        """
-        try:
-            # Configure rumble parameters based on speed
-            if speed_mode == Speed.LOW:
-                # Low speed: gentle, slow oscillating rumble (like idle/slow movement)
-                base_intensity = 5000
-                variation = 2000
-                cycle_time = 0.5  # Slower oscillation
-            elif speed_mode == Speed.MEDIUM:
-                # Medium speed: moderate, faster oscillating rumble
-                base_intensity = 15000
-                variation = 5000
-                cycle_time = 0.3  # Medium oscillation
-            else:  # HIGH
-                # High speed: stronger, rapid oscillating rumble
-                base_intensity = 30000
-                variation = 10000
-                cycle_time = 0.15  # Faster oscillation
-
-            # Run the rumble pattern until stopped
-            start_time = time.time()
-            while self._rumble_active:
-                # Create a subtle oscillation in rumble intensity
-                elapsed = time.time() - start_time
-                # Use a sine wave to create smooth oscillation
-                oscillation = math.sin(elapsed * (2 * math.pi / cycle_time))
-                intensity = int(base_intensity + oscillation * variation)
-
-                # Apply the rumble effect
-                self.feedback.set_rumble(intensity, intensity, 50)
-
-                # Short sleep to control update frequency
-                time.sleep(0.05)
-
-        except Exception as e:
-            print(f"Rumble error: {e}")
-        finally:
-            # Ensure rumble is stopped when thread ends
-            self.feedback.set_rumble(0, 0, 0)
 
     def cleanup(self):
         """Clean up resources."""

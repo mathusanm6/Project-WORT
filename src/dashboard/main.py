@@ -13,16 +13,23 @@ import argparse
 import logging
 import signal
 import sys
-import threading
 import time
-from typing import Dict, Optional
 
 import pygame
 
+# Import from src.common
+from src.common.enum.movement import (
+    CurvedTurnRate,
+    SpeedMode,
+    ThrustDirection,
+    TurnDirection,
+    TurnType,
+)
 from src.common.mqtt.client import MQTTClient
+
+# Import from src.dashboard
 from src.dashboard.controller_movement_adapter import ControllerMovementAdapter
 from src.dashboard.game_controller.dualsense_controller import DualSenseController
-from src.rasptank.movement.movement_api import ThrustDirection, TurnDirection
 
 # Configure logging
 logging.basicConfig(
@@ -55,18 +62,20 @@ def signal_handler(sig, frame):
 
 
 def send_movement_command(
-    speed: float,
     thrust_direction: ThrustDirection,
     turn_direction: TurnDirection,
-    turn_factor: float,
+    turn_type: TurnType,
+    speed_mode: SpeedMode,
+    curved_turn_rate: CurvedTurnRate,
 ):
     """Send movement commands to the Rasptank via MQTT.
 
     Args:
-        speed (float): Speed percentage (0-100)
-        thrust_direction (ThrustDirection): Forward, backward, or none
-        turn_direction (TurnDirection): Left, right, or none
-        turn_factor (float): Turn factor (affets the sharpness of the turn)
+        thrust_direction (ThrustDirection): Thrust direction
+        turn_direction (TurnDirection): Turn direction
+        turn_type (TurnType): Turn type
+        speed (Speed): Speed factor between 0.0 and 100.0
+        curved_turn_rate (CurvedTurnRate): Rate of turn for CURVE turn type (0.0 to 1.0 with 0.0 being no curve)
     """
     global mqtt_client
 
@@ -76,7 +85,7 @@ def send_movement_command(
 
     try:
         # Format the movement command
-        message = f"{speed:.1f};{thrust_direction.value};{turn_direction.value};{turn_factor:.2f}"
+        message = f"{thrust_direction.value};{turn_direction.value};{turn_type.value};{speed_mode.value};{curved_turn_rate.value:.2f}"
 
         # Publish the command
         logger.debug(f"Sending movement command: {message}")
@@ -86,12 +95,11 @@ def send_movement_command(
         logger.error(f"Error sending movement command: {e}")
 
 
-def send_action_command(action: str, value: str):
+def send_action_command(action: str):
     """Send action commands to the Rasptank via MQTT.
 
     Args:
-        action (str): Action type (e.g., 'shoot', 'camera', 'action')
-        value (str): Action value
+        action (str): Action type (e.g., 'shoot', 'pivot', 'camera')
     """
     global mqtt_client
 
@@ -101,16 +109,16 @@ def send_action_command(action: str, value: str):
 
     try:
         topic = None
-        message = value
+        message = ""
 
         # Determine the appropriate topic based on the action
         if action == "shoot":
             topic = SHOOT_COMMAND_TOPIC
         elif action == "camera":
             topic = CAMERA_COMMAND_TOPIC
-        elif action == "action" or action == "precision" or action == "dpad":
+        elif action == "action":
             topic = ACTION_COMMAND_TOPIC
-            message = f"{action};{value}"
+            message = f"{action}"
         else:
             logger.warning(f"Unknown action command: {action}")
             return
@@ -273,24 +281,38 @@ def print_dashboard():
             adapter_status = movement_controller.get_status()
 
             # Display speed mode
-            speed_modes = ["LOW (80%)", "MEDIUM (90%)", "HIGH (100%)"]
-            speed_mode = adapter_status.get("speed_mode", 1)
+            speed_modes = SpeedMode.get_speed_modes()
+            formatted_speed_modes = SpeedMode.for_display()
+            current_speed_mode_idx = adapter_status.get("current_speed_mode_idx", 0)
+            current_speed_mode = adapter_status.get("current_speed_mode", SpeedMode.GEAR_1)
+            current_speed_value = adapter_status.get("current_speed_value", SpeedMode.GEAR_1.value)
 
-            # Ensure speed_mode is within bounds (0-2)
-            if not isinstance(speed_mode, int):
-                speed_mode = 1
-            speed_mode = max(0, min(len(speed_modes) - 1, speed_mode))
+            current_speed_mode_idx = max(0, min(len(speed_modes) - 1, current_speed_mode_idx))
 
-            print(f"Speed Mode:     {speed_modes[speed_mode]}")
+            print(f"Speed Mode:     {formatted_speed_modes[current_speed_mode_idx]}")
 
             if adapter_status["last_movement"]:
-                speed, thrust, turn, factor = adapter_status["last_movement"]
-                if thrust == ThrustDirection.NONE and turn == TurnDirection.NONE:
+                (
+                    thrust_direction,
+                    turn_direction,
+                    turn_type,
+                    speed_mode,
+                    curved_turn_rate,
+                ) = adapter_status["last_movement"]
+                if (
+                    thrust_direction == ThrustDirection.NONE
+                    and turn_direction == TurnDirection.NONE
+                ):
                     print("Movement:       Stopped")
                 else:
-                    print(
-                        f"Movement:       {thrust.value} @ {speed:.1f}% speed, turning {turn.value} @ {factor:.2f}"
-                    )
+                    if turn_type == TurnType.CURVE:
+                        print(
+                            f"Movement:       {thrust_direction}, {turn_direction}, {turn_type}, {speed_mode} ({current_speed_value}%), {curved_turn_rate} ({curved_turn_rate.value * 100:.0f}%)"
+                        )
+                    else:
+                        print(
+                            f"Movement:       {thrust_direction}, {turn_direction}, {turn_type}, {speed_mode} ({current_speed_value}%)"
+                        )
             else:
                 print("Movement:       Stopped")
 
@@ -298,14 +320,6 @@ def print_dashboard():
             if "joystick_position" in adapter_status:
                 x, y = adapter_status["joystick_position"]
                 print(f"Joystick:       X: {x:.2f}, Y: {y:.2f}")
-
-                # Show turn calculation based on stick position
-                if abs(x) > 0.2:
-                    turn_type = "SHARP" if abs(x) > 0.8 else "MODERATE"
-                    turn_factor = 1.0 if abs(x) > 0.8 else 0.6
-                    print(f"Turn type:      {turn_type} turn (factor: {turn_factor:.1f})")
-                else:
-                    print("Turn type:      No turn (dead zone)")
 
         else:
             # Display raw controller info if no movement adapter
@@ -324,17 +338,12 @@ def print_dashboard():
         print("Controller:     Disabled")
 
     print("\n-- CONTROL SCHEME --")
-    print("Left Stick:     Forward/Backward movement")
-    print("Left Stick:     Left/Right turning (>0.8 = sharp, <0.8 = moderate)")
-    print("L1/R1:          Speed control (Low, Medium, High)")
+    print("D-Pad:          Movement with spin turning")
+    print("Left Stick:     Movement with curve turning")
+    print("L1/R1:          Speed control using gears")
     print("R2:             Shoot")
     if dualsense_controller and dualsense_controller.get_status().get("has_feedback", False):
-        print("\n-- FEEDBACK SYSTEM --")
-        print("LED Color:      Green (Low Speed), Yellow (Medium), Red (High)")
-        print("Battery:        Orange pulsing (Low), Red flashing (Critical)")
-        print("Turning:        Asymmetric rumble based on turn direction")
-        print("Shooting:       Strong rumble pulse")
-        print("Game Events:    Specialized feedback patterns")
+        print("\n-- FEEDBACK SYSTEM ACTIVE --")
 
     print("\nPress Ctrl+C to exit")
 
@@ -513,7 +522,7 @@ def main():
         logger.info("- R2: Shoot")
 
         # Main loop
-        dashboard_update_interval = 1.0  # seconds
+        dashboard_update_interval = 1.0 / 24.0  # 24Hz update rate
         last_dashboard_update = 0
         controller_retry_interval = 10.0  # seconds
         last_controller_retry = 0
@@ -556,7 +565,7 @@ def main():
                 last_dashboard_update = current_time
 
             # Sleep to avoid busy waiting
-            time.sleep(0.01)  # Reduced sleep time for more responsive controller input
+            time.sleep(0.005)  # 5ms sleep
 
     except Exception as e:
         logger.error(f"Error in main loop: {e}", exc_info=True)

@@ -1,39 +1,38 @@
 """Hardware-specific implementation for Rasptank motors"""
 
 import time
-from enum import Enum
 
 import RPi.GPIO as GPIO
 
-from src.rasptank.movement.movement_api import ThrustDirection, TurnDirection
-
-
-class TurnFactor(Enum):
-    """Turning factor for the Rasptank movement controller"""
-
-    NONE = 0.0
-    MODERATE = 0.6
-    SHARP = 1.0
+# Import from src.common
+from src.common.enum.movement import (
+    CurvedTurnRate,
+    SpeedMode,
+    ThrustDirection,
+    TurnDirection,
+    TurnType,
+)
 
 
 class RasptankHardware:
     """Hardware-specific implementation for Rasptank motors"""
 
     # GPIO pin definitions
-    Motor_A_EN = 4
-    Motor_B_EN = 17
-    Motor_A_Pin1 = 14
-    Motor_A_Pin2 = 15
-    Motor_B_Pin1 = 27
-    Motor_B_Pin2 = 18
+    MOTOR_A_EN = 4
+    MOTOR_B_EN = 17
+    MOTOR_A_PIN1 = 14
+    MOTOR_A_PIN2 = 15
+    MOTOR_B_PIN1 = 27
+    MOTOR_B_PIN2 = 18
 
     # Direction constants
-    Dir_forward = 0
-    Dir_backward = 1
-    left_forward = 0
-    left_backward = 1
-    right_forward = 0
-    right_backward = 1
+    DIR_FORWARD = 0
+    DIR_BACKWARD = 1
+
+    # Kickstart constants
+    KICKSTART_THRESHOLD = 20
+    KICKSTART_DUTY_CYCLE = 50
+    KICKSTART_DURATION = 0.1
 
     def __init__(self):
         """Initialize GPIO and motor controllers"""
@@ -47,114 +46,177 @@ class RasptankHardware:
         GPIO.setmode(GPIO.BCM)
 
         # Set up motor pins
-        GPIO.setup(self.Motor_A_EN, GPIO.OUT)
-        GPIO.setup(self.Motor_B_EN, GPIO.OUT)
-        GPIO.setup(self.Motor_A_Pin1, GPIO.OUT)
-        GPIO.setup(self.Motor_A_Pin2, GPIO.OUT)
-        GPIO.setup(self.Motor_B_Pin1, GPIO.OUT)
-        GPIO.setup(self.Motor_B_Pin2, GPIO.OUT)
+        GPIO.setup(self.MOTOR_A_EN, GPIO.OUT)
+        GPIO.setup(self.MOTOR_B_EN, GPIO.OUT)
+        GPIO.setup(self.MOTOR_A_PIN1, GPIO.OUT)
+        GPIO.setup(self.MOTOR_A_PIN2, GPIO.OUT)
+        GPIO.setup(self.MOTOR_B_PIN1, GPIO.OUT)
+        GPIO.setup(self.MOTOR_B_PIN2, GPIO.OUT)
+
+        # Initialize PWM
+        try:
+            self.pwm_A = GPIO.PWM(self.MOTOR_A_EN, 1000)
+            self.pwm_B = GPIO.PWM(self.MOTOR_B_EN, 1000)
+            # Start PWM with 0 duty cycle (motors off)
+            self.pwm_A.start(0)
+            self.pwm_B.start(0)
+        except Exception as e:
+            print(f"PWM setup error: {e}")
 
         # Stop motors initially
         self._motor_stop()
 
-        # Set up PWM
-        try:
-            self.pwm_A = GPIO.PWM(self.Motor_A_EN, 1000)
-            self.pwm_B = GPIO.PWM(self.Motor_B_EN, 1000)
-        except Exception as e:
-            print(f"PWM setup error: {e}")
-
     def _motor_stop(self):
         """Stop all motors"""
-        GPIO.output(self.Motor_A_Pin1, GPIO.LOW)
-        GPIO.output(self.Motor_A_Pin2, GPIO.LOW)
-        GPIO.output(self.Motor_B_Pin1, GPIO.LOW)
-        GPIO.output(self.Motor_B_Pin2, GPIO.LOW)
-        GPIO.output(self.Motor_A_EN, GPIO.LOW)
-        GPIO.output(self.Motor_B_EN, GPIO.LOW)
+        GPIO.output(self.MOTOR_A_PIN1, GPIO.LOW)
+        GPIO.output(self.MOTOR_A_PIN2, GPIO.LOW)
+        GPIO.output(self.MOTOR_B_PIN1, GPIO.LOW)
+        GPIO.output(self.MOTOR_B_PIN2, GPIO.LOW)
+        # Set duty cycle to 0 to stop motors
+        self.pwm_A.ChangeDutyCycle(0)
+        self.pwm_B.ChangeDutyCycle(0)
 
-    def _motor_left(self, status, direction, speed):
+    def _motor_left(self, status, direction, speed_value):
         """Control left motor"""
         if status == 0:  # stop
-            GPIO.output(self.Motor_B_Pin1, GPIO.LOW)
-            GPIO.output(self.Motor_B_Pin2, GPIO.LOW)
-            GPIO.output(self.Motor_B_EN, GPIO.LOW)
+            GPIO.output(self.MOTOR_B_PIN1, GPIO.LOW)
+            GPIO.output(self.MOTOR_B_PIN2, GPIO.LOW)
+            self.pwm_B.ChangeDutyCycle(0)
         else:
-            if direction == self.Dir_backward:
-                GPIO.output(self.Motor_B_Pin1, GPIO.HIGH)
-                GPIO.output(self.Motor_B_Pin2, GPIO.LOW)
-                self.pwm_B.start(100)
-                self.pwm_B.ChangeDutyCycle(speed)
-            elif direction == self.Dir_forward:
-                GPIO.output(self.Motor_B_Pin1, GPIO.LOW)
-                GPIO.output(self.Motor_B_Pin2, GPIO.HIGH)
-                self.pwm_B.start(0)
-                self.pwm_B.ChangeDutyCycle(speed)
+            if direction == self.DIR_BACKWARD:
+                GPIO.output(self.MOTOR_B_PIN1, GPIO.LOW)
+                GPIO.output(self.MOTOR_B_PIN2, GPIO.HIGH)
+            elif direction == self.DIR_FORWARD:
+                GPIO.output(self.MOTOR_B_PIN1, GPIO.HIGH)
+                GPIO.output(self.MOTOR_B_PIN2, GPIO.LOW)
+            if speed_value < self.KICKSTART_THRESHOLD:
+                self.pwm_B.ChangeDutyCycle(self.KICKSTART_DUTY_CYCLE)
+                time.sleep(self.KICKSTART_DURATION)
+            self.pwm_B.ChangeDutyCycle(int(speed_value))
 
-    def _motor_right(self, status, direction, speed):
+    def _motor_right(self, status, direction, speed_value):
         """Control right motor"""
         if status == 0:  # stop
-            GPIO.output(self.Motor_A_Pin1, GPIO.LOW)
-            GPIO.output(self.Motor_A_Pin2, GPIO.LOW)
-            GPIO.output(self.Motor_A_EN, GPIO.LOW)
+            GPIO.output(self.MOTOR_A_PIN1, GPIO.LOW)
+            GPIO.output(self.MOTOR_A_PIN2, GPIO.LOW)
+            self.pwm_A.ChangeDutyCycle(0)
         else:
-            if direction == self.Dir_forward:
-                GPIO.output(self.Motor_A_Pin1, GPIO.HIGH)
-                GPIO.output(self.Motor_A_Pin2, GPIO.LOW)
-                self.pwm_A.start(100)
-                self.pwm_A.ChangeDutyCycle(speed)
-            elif direction == self.Dir_backward:
-                GPIO.output(self.Motor_A_Pin1, GPIO.LOW)
-                self.pwm_A.start(0)
-                GPIO.output(self.Motor_A_Pin2, GPIO.HIGH)
-                self.pwm_A.ChangeDutyCycle(speed)
+            if direction == self.DIR_FORWARD:
+                GPIO.output(self.MOTOR_A_PIN1, GPIO.LOW)
+                GPIO.output(self.MOTOR_A_PIN2, GPIO.HIGH)
+            elif direction == self.DIR_BACKWARD:
+                GPIO.output(self.MOTOR_A_PIN1, GPIO.HIGH)
+                GPIO.output(self.MOTOR_A_PIN2, GPIO.LOW)
+            if speed_value < self.KICKSTART_THRESHOLD:
+                self.pwm_A.ChangeDutyCycle(self.KICKSTART_DUTY_CYCLE)
+                time.sleep(self.KICKSTART_DURATION)
+            self.pwm_A.ChangeDutyCycle(int(speed_value))
 
     def move_hardware(
         self,
         thrust_direction: ThrustDirection,
         turn_direction: TurnDirection,
-        speed: float,
-        turn_factor: float,
+        turn_type: TurnType,
+        speed_mode: SpeedMode,
+        curved_turn_rate: CurvedTurnRate,
     ):
         """Direct hardware movement implementation.
 
         Args:
-            thrust_direction (ThrustDirection): Thrust direction
-            turn_direction (TurnDirection): Turn direction
-            speed (float): Speed factor between 0.0 and 100.0
-            turn_factor (float): Turning factor between 0.0 and 1.0 (affects the sharpness of the turn)
+            thrust_direction (ThrustDirection): FORWARD/BACKWARD/NONE
+            turn_direction (TurnDirection): LEFT/RIGHT/NONE
+            turn_type (TurnType): SPIN/PIVOT/CURVE/NONE
+            speed_mode (SpeedMode): STOP/GEAR_1/GEAR_2/GEAR_3
+            curved_turn_rate (CurvedTurnRate): Rate of turn for CURVE turn type (0.0 to 1.0 with 0.0 being no curve)
         """
+        speed_value = speed_mode.value
+        curved_turn_rate_value = curved_turn_rate.value
+
+        # Forward movement handling
         if thrust_direction == ThrustDirection.FORWARD:
-            if turn_direction == TurnDirection.LEFT:
-                self._motor_left(1, self.left_forward, int(speed * turn_factor))
-                self._motor_right(1, self.right_backward, speed)
-            elif turn_direction == TurnDirection.RIGHT:
-                self._motor_left(1, self.left_backward, speed)
-                self._motor_right(1, self.right_forward, int(speed * turn_factor))
-            else:
-                self._motor_left(1, self.left_backward, speed)
-                self._motor_right(1, self.right_backward, speed)
-        elif thrust_direction == ThrustDirection.BACKWARD:
-            if turn_direction == TurnDirection.LEFT:
-                self._motor_left(1, self.left_backward, int(speed * turn_factor))
-                self._motor_right(1, self.right_forward, speed)
-            elif turn_direction == TurnDirection.RIGHT:
-                self._motor_left(1, self.left_forward, speed)
-                self._motor_right(1, self.right_backward, int(speed * turn_factor))
-            else:
-                self._motor_left(1, self.left_forward, speed)
-                self._motor_right(1, self.right_forward, speed)
-        elif thrust_direction == ThrustDirection.NONE:
-            if turn_direction == TurnDirection.RIGHT:
-                self._motor_left(1, self.left_backward, speed)
-                self._motor_right(1, self.right_forward, speed)
+            if turn_direction == TurnDirection.NONE:
+                self._motor_left(1, self.DIR_FORWARD, speed_value)
+                self._motor_right(1, self.DIR_FORWARD, speed_value)
             elif turn_direction == TurnDirection.LEFT:
-                self._motor_left(1, self.left_forward, speed)
-                self._motor_right(1, self.right_backward, speed)
+                if turn_type == TurnType.CURVE:
+                    self._motor_left(
+                        1, self.DIR_FORWARD, int(speed_value * (1 - curved_turn_rate_value))
+                    )
+                    self._motor_right(1, self.DIR_FORWARD, speed_value)
+                else:
+                    raise ValueError("Turn type must be CURVE for FORWARD + LEFT")
+            elif turn_direction == TurnDirection.RIGHT:
+                if turn_type == TurnType.CURVE:
+                    self._motor_left(1, self.DIR_FORWARD, speed_value)
+                    self._motor_right(
+                        1, self.DIR_FORWARD, int(speed_value * (1 - curved_turn_rate_value))
+                    )
+                else:
+                    raise ValueError("Turn type must be CURVE for FORWARD + RIGHT")
             else:
+                raise ValueError("Invalid turn direction")
+            return
+
+        # Backward movement handling
+        if thrust_direction == ThrustDirection.BACKWARD:
+            if turn_direction == TurnDirection.NONE:
+                self._motor_left(1, self.DIR_BACKWARD, speed_value)
+                self._motor_right(1, self.DIR_BACKWARD, speed_value)
+            elif turn_direction == TurnDirection.LEFT:
+                if turn_type == TurnType.CURVE:
+                    self._motor_left(
+                        1, self.DIR_BACKWARD, int(speed_value * (1 - curved_turn_rate_value))
+                    )
+                    self._motor_right(1, self.DIR_BACKWARD, speed_value)
+                else:
+                    raise ValueError("Turn type must be CURVE for BACKWARD + LEFT")
+            elif turn_direction == TurnDirection.RIGHT:
+                if turn_type == TurnType.CURVE:
+                    self._motor_left(1, self.DIR_BACKWARD, speed_value)
+                    self._motor_right(
+                        1, self.DIR_BACKWARD, int(speed_value * (1 - curved_turn_rate_value))
+                    )
+                else:
+                    raise ValueError("Turn type must be CURVE for BACKWARD + RIGHT")
+            else:
+                raise ValueError("Invalid turn direction")
+            return
+
+        # No thrust (stationary) handling
+        if thrust_direction == ThrustDirection.NONE:
+            if turn_direction == TurnDirection.NONE:
                 self._motor_stop()
+            elif turn_direction == TurnDirection.LEFT:
+                if turn_type == TurnType.SPIN:
+                    self._motor_left(1, self.DIR_BACKWARD, speed_value)
+                    self._motor_right(1, self.DIR_FORWARD, speed_value)
+                elif turn_type == TurnType.PIVOT:
+                    self._motor_left(0, self.DIR_FORWARD, 0)  # stop left motor
+                    self._motor_right(1, self.DIR_FORWARD, speed_value)
+                elif turn_type == TurnType.CURVE:
+                    raise ValueError("CURVE not supported without thrust")
+                else:
+                    raise ValueError("Turn type should be SPIN or PIVOT for NONE thrust")
+            elif turn_direction == TurnDirection.RIGHT:
+                if turn_type == TurnType.SPIN:
+                    self._motor_left(1, self.DIR_FORWARD, speed_value)
+                    self._motor_right(1, self.DIR_BACKWARD, speed_value)
+                elif turn_type == TurnType.PIVOT:
+                    self._motor_left(1, self.DIR_FORWARD, speed_value)
+                    self._motor_right(0, self.DIR_FORWARD, 0)  # stop right motor
+                elif turn_type == TurnType.CURVE:
+                    raise ValueError("CURVE not supported without thrust")
+                else:
+                    raise ValueError("Turn type should be SPIN or PIVOT for NONE thrust")
+            else:
+                raise ValueError("Invalid turn direction")
 
     def cleanup(self):
         """Clean up GPIO resources"""
         self._motor_stop()
+        # Stop PWM before cleanup
+        if self.pwm_A:
+            self.pwm_A.stop()
+        if self.pwm_B:
+            self.pwm_B.stop()
         GPIO.cleanup()

@@ -6,7 +6,7 @@ This module handles the common functionality for all game controllers.
 import logging
 import threading
 import time
-from typing import Callable, Dict, Optional
+from typing import Dict
 
 import pygame
 

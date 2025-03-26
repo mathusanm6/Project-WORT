@@ -6,7 +6,7 @@ Adds rumble and LED support to the DualSense controller integration.
 import logging
 import threading
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 # Try to import SDL2 dependencies, but allow fallback if not available
 try:
@@ -22,17 +22,6 @@ logger = logging.getLogger(__name__)
 
 class DualSenseFeedback:
     """Class to add rumble and LED functionality to DualSense controller."""
-
-    # Speed mode color mapping
-    SPEED_MODE_COLORS = {
-        0: (0, 255, 0),  # Low speed: Green
-        1: (255, 255, 0),  # Medium speed: Yellow
-        2: (255, 0, 0),  # High speed: Red
-    }
-
-    # Battery level color mapping
-    BATTERY_WARNING_LEVEL = 20  # Percentage
-    BATTERY_CRITICAL_LEVEL = 10  # Percentage
 
     def __init__(self):
         """Initialize the DualSense feedback controller."""
@@ -314,143 +303,6 @@ class DualSenseFeedback:
         # Make sure rumble is off
         if self.initialized and self.sdl_controller:
             self.set_rumble(0, 0, 0)
-
-    def trigger_quick_feedback(self, intensity=40000, duration_ms=100):
-        """Provide a quick rumble feedback that is clearly noticeable.
-
-        Args:
-            intensity: Rumble intensity (default: 40000)
-            duration_ms: Duration in milliseconds (default: 100ms)
-
-        Returns:
-            bool: Success or failure
-        """
-        # Use both motors for clear feedback
-        return self.set_rumble(intensity, intensity, duration_ms)
-
-    def update_for_speed(self, speed_mode: int, speed: float) -> None:
-        """Update LED and rumble based on current speed.
-
-        Args:
-            speed_mode: Current speed mode (0, 1, 2)
-            speed: Current speed value (0-100)
-        """
-        if not self.initialized:
-            return
-
-        # Set LED color based on speed mode
-        if speed_mode in self.SPEED_MODE_COLORS:
-            self.set_led_color(*self.SPEED_MODE_COLORS[speed_mode])
-
-        # Base rumble intensity on actual speed
-        if speed > 0:
-            # Calculate intensity based on speed percentage
-            intensity = int(
-                (speed / 100.0) * 20000
-            )  # Lower base intensity to avoid excessive rumble
-
-            # Different rumble patterns for different speed modes
-            if speed_mode == 0:  # Low speed
-                # Gentle, low-frequency rumble for low speed
-                self.set_rumble(intensity, intensity // 4, 100)
-            elif speed_mode == 1:  # Medium speed
-                # Balanced rumble for medium speed
-                self.set_rumble(intensity, intensity // 2, 100)
-            elif speed_mode == 2:  # High speed
-                # More intense, higher-frequency rumble for high speed
-                self.set_rumble(intensity // 2, intensity, 100)
-
-    def update_for_turning(self, turn_direction: str, turn_factor: float, speed: float) -> None:
-        """Update rumble based on turning.
-
-        Args:
-            turn_direction: Direction of turn ('left', 'right', 'none')
-            turn_factor: Turning factor (0.0-1.0)
-            speed: Current speed value (0-100)
-        """
-        if not self.initialized or turn_direction == "none":
-            return
-
-        # Calculate base intensity from speed
-        base_intensity = int((speed / 100.0) * 32768)
-
-        # Scale by turn factor
-        turn_intensity = int(base_intensity * turn_factor * 1.5)  # Amplify turning feedback
-        base_intensity = min(turn_intensity, 65535)  # Cap at max value
-
-        # Asymmetric rumble based on turn direction
-        if turn_direction == "left":
-            # Stronger rumble on left motor when turning left
-            self.set_rumble(base_intensity, base_intensity // 3, 100)
-        elif turn_direction == "right":
-            # Stronger rumble on right motor when turning right
-            self.set_rumble(base_intensity // 3, base_intensity, 100)
-
-    def feedback_hit(self):
-        """Provide feedback when tank is hit."""
-        # Strong, sharp hit feedback
-        self.set_rumble(65535, 65535, 300)
-
-        # Flash LED red
-        for _ in range(3):
-            self.set_led_color(255, 0, 0)  # Red
-            time.sleep(0.1)
-            self.set_led_color(0, 0, 0)  # Off
-            time.sleep(0.1)
-
-    def feedback_flag_captured(self):
-        """Provide feedback when flag is captured."""
-        # Celebratory pulsing pattern
-        self.pulse_rumble(intensity=32767, duration_sec=2, pattern_ms=200)
-
-        # Flash LED green
-        for _ in range(5):
-            self.set_led_color(0, 255, 0)  # Green
-            time.sleep(0.1)
-            self.set_led_color(0, 0, 0)  # Off
-            time.sleep(0.1)
-
-    def feedback_flag_dropped(self):
-        """Provide feedback when flag is dropped."""
-        # Sad feedback - low intensity longer duration
-        self.set_rumble(20000, 10000, 500)
-
-        # Flash LED blue
-        for _ in range(2):
-            self.set_led_color(0, 0, 255)  # Blue
-            time.sleep(0.2)
-            self.set_led_color(0, 0, 0)  # Off
-            time.sleep(0.2)
-
-    def update_for_battery(self, battery_level: int) -> bool:
-        """Update LED based on battery level.
-
-        Args:
-            battery_level: Battery percentage (0-100)
-
-        Returns:
-            bool: True if battery warning is active
-        """
-        if not self.initialized:
-            return False
-
-        # Handle low battery warning
-        if battery_level <= self.BATTERY_CRITICAL_LEVEL:
-            # Critical battery - fast red flashing
-            if time.time() % 0.6 < 0.3:  # Fast flashing
-                self.set_led_color(255, 0, 0)  # Bright red
-            else:
-                self.set_led_color(50, 0, 0)  # Dim red
-            return True
-        elif battery_level <= self.BATTERY_WARNING_LEVEL:
-            # Low battery - slow orange pulsing
-            if time.time() % 2 < 1:  # Slow pulsing
-                self.set_led_color(255, 128, 0)  # Orange
-            else:
-                self.set_led_color(50, 25, 0)  # Dim orange
-            return True
-
-        return False
 
     def cleanup(self):
         """Clean up resources."""
