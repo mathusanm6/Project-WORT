@@ -4,7 +4,7 @@ This module provides standardized event types and constants for controller event
 """
 
 from enum import Enum
-from typing import Callable, Dict, NamedTuple, Tuple
+from typing import Callable, Dict, NamedTuple
 
 
 class ButtonEventType(Enum):

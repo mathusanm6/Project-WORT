@@ -21,8 +21,6 @@ if IS_MACOS:
         "triangle": 3,  # Triangle button
         "L1": 9,  # Left shoulder
         "R1": 10,  # Right shoulder
-        # "L2": 7,         # Left trigger (digital)
-        # "R2": 8,         # Right trigger (digital)
         "share": 4,  # Create/Share button
         "options": 6,  # Options button
         "PS": 5,  # PlayStation button
@@ -58,8 +56,6 @@ elif IS_WINDOWS:
         "triangle": 3,  # Triangle button
         "L1": 4,  # Left shoulder
         "R1": 5,  # Right shoulder
-        "L2": 6,  # Left trigger (digital)
-        "R2": 7,  # Right trigger (digital)
         "share": 8,  # Create/Share button
         "options": 9,  # Options button
         "PS": 10,  # PlayStation button
@@ -103,8 +99,6 @@ else:  # Default Linux mappings
         "triangle": 3,  # Triangle button
         "L1": 4,  # Left shoulder
         "R1": 5,  # Right shoulder
-        "L2": 6,  # Left trigger (digital)
-        "R2": 7,  # Right trigger (digital)
         "share": 8,  # Create/Share button
         "options": 9,  # Options button
         "PS": 10,  # PlayStation button

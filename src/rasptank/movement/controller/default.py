@@ -1,10 +1,18 @@
 """Default implementation of movement controller for Rasptank."""
 
 import threading
-import time
 
+# Import from src.common
+from src.common.enum.movement import (
+    CurvedTurnRate,
+    SpeedMode,
+    ThrustDirection,
+    TurnDirection,
+    TurnType,
+)
+
+# Import from src.rasptank
 from src.rasptank.movement.controller.base import BaseMovementController
-from src.rasptank.movement.movement_api import State, ThrustDirection, TurnDirection
 from src.rasptank.movement.rasptank_hardware import RasptankHardware
 
 
@@ -28,23 +36,21 @@ class DefaultMovementController(BaseMovementController):
         self,
         thrust_direction: ThrustDirection,
         turn_direction: TurnDirection,
-        speed: float,
-        turn_factor: float,
+        turn_type: TurnType,
+        speed_mode: SpeedMode,
+        curved_turn_rate: CurvedTurnRate,
     ):
         """Apply the movement to the hardware."""
 
         # Apply movement to hardware
-        self.hardware.move_hardware(thrust_direction, turn_direction, speed, turn_factor)
+        self.hardware.move_hardware(
+            thrust_direction, turn_direction, turn_type, speed_mode, curved_turn_rate
+        )
 
-        # Update state
-        self._state = {
-            State.THRUST_DIRECTION: thrust_direction,
-            State.TURN_DIRECTION: turn_direction,
-            State.SPEED: speed,
-            State.TURN_FACTOR: turn_factor,
-        }
-
-        return self._state
+        # Return the updated state
+        return self.update_state(
+            thrust_direction, turn_direction, turn_type, speed_mode, curved_turn_rate
+        )
 
     def cleanup(self):
         """Clean up resources"""
