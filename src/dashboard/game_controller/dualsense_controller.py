@@ -154,7 +154,9 @@ class DualSenseController(BaseController):
                 self.axis_states[i] = self.joystick.get_axis(i)
 
                 # Check if there's a significant change in axis value
-                if abs(self.axis_states[i] - self.prev_axis_states.get(i, 0.0)) > 0.01:
+                if (
+                    abs(self.axis_states[i] - self.prev_axis_states.get(i, 0.0)) > 0.01
+                ):  # 1% change to avoid noise while also allowing for small changes
                     self._handle_axis(i, self.axis_states[i])
 
             # Try to read hat (D-pad) if available and we're using hat mode

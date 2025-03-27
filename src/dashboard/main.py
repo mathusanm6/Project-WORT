@@ -74,7 +74,7 @@ def send_movement_command(
         thrust_direction (ThrustDirection): Thrust direction
         turn_direction (TurnDirection): Turn direction
         turn_type (TurnType): Turn type
-        speed (Speed): Speed factor between 0.0 and 100.0
+        speed_mode (SpeedMode): Speed mode
         curved_turn_rate (CurvedTurnRate): Rate of turn for CURVE turn type (0.0 to 1.0 with 0.0 being no curve)
     """
     global mqtt_client
