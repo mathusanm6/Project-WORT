@@ -86,7 +86,7 @@ class DualsenseFeedbackCollection:
         self._rumble_thread.daemon = True
         self._rumble_thread.start()
 
-    def stop_rumble(self):
+    def stop_rumble(self) -> None:
         """Stop the rumble effect."""
         if hasattr(self, "_rumble_active"):
             self._rumble_active = False
@@ -101,7 +101,7 @@ class DualsenseFeedbackCollection:
         turn_type: TurnType,
         speed: SpeedMode,
         curved_turn_rate: CurvedTurnRate,
-    ):
+    ) -> None:
         """Create a continuous rumble pattern that simulates realistic tank movement.
 
         Focuses on:
@@ -266,17 +266,40 @@ class DualsenseFeedbackCollection:
             # Ensure rumble is stopped when thread ends
             self.feedback.set_rumble(0, 0, 0)
 
-    def feedback_hit(self):
-        """Provide feedback when tank is hit."""
-        # Strong, sharp hit feedback
-        self.set_rumble(65535, 65535, 300)
+    def on_shoot(self, prev_r: int, prev_g: int, prev_b: int) -> None:
+        """Provide feedback when tank shoots."""
+        # Sharp, immediate rumble to simulate a high-pitch 'BOUM'
+        self.feedback.set_rumble(30000, 30000, 200)
 
         # Flash LED red
-        for _ in range(3):
-            self.set_led_color(255, 0, 0)  # Red
+        self.feedback.set_led_color(255, 0, 0)  # Red
+        time.sleep(0.15)
+
+        # Restore LED to previous color immediately
+        self.feedback.set_led_color(prev_r, prev_g, prev_b)
+
+    def on_hit_by_shot(self, prev_r: int, prev_g: int, prev_b: int) -> None:
+        """Provide feedback when tank is hit by a shot."""
+        # Flash LED red for 2 seconds
+        start_time = time.time()
+        while time.time() - start_time < 2:
+            elapsed_time = time.time() - start_time
+            progress = elapsed_time / 2  # Progression from 0 to 1 over 2 seconds
+
+            # Interpolate color from red (255, 0, 0) to green (0, 255, 0)
+            r = int(255 * (1 - progress))
+            g = int(255 * progress)
+            b = 0
+
+            self.feedback.set_rumble(65535, 65535, 200)
+            self.feedback.set_led_color(r, g, b)
+            time.sleep(0.2)
+            self.feedback.set_rumble(0, 0, 100)
+            self.feedback.set_led_color(0, 0, 0)  # Off
             time.sleep(0.1)
-            self.set_led_color(0, 0, 0)  # Off
-            time.sleep(0.1)
+
+        # Restore LED to previous color immediately
+        self.feedback.set_led_color(prev_r, prev_g, prev_b)
 
     def feedback_flag_captured(self):
         """Provide feedback when flag is captured."""

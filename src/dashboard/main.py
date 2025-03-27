@@ -17,7 +17,11 @@ import time
 
 import pygame
 
+from src.common.constants.actions import SHOOT_COMMAND_TOPIC, ActionType
+
 # Import from src.common
+from src.common.constants.game import GAME_EVENT_TOPIC, STATUS_TOPIC
+from src.common.constants.movement import MOVEMENT_COMMAND_TOPIC
 from src.common.enum.movement import (
     CurvedTurnRate,
     SpeedMode,
@@ -28,7 +32,7 @@ from src.common.enum.movement import (
 from src.common.mqtt.client import MQTTClient
 
 # Import from src.dashboard
-from src.dashboard.controller_movement_adapter import ControllerMovementAdapter
+from src.dashboard.controller_adapter import ControllerAdapter
 from src.dashboard.game_controller.dualsense_controller import DualSenseController
 
 # Configure logging
@@ -39,12 +43,9 @@ logging.basicConfig(
 logger = logging.getLogger("RasptankMQTT")
 
 # MQTT Topics
-MOVEMENT_COMMAND_TOPIC = "rasptank/movement/command"
-SHOOT_COMMAND_TOPIC = "rasptank/action/shoot"
 CAMERA_COMMAND_TOPIC = "rasptank/camera/command"
 ACTION_COMMAND_TOPIC = "rasptank/action/command"
-STATUS_TOPIC = "rasptank/status"
-GAME_EVENT_TOPIC = "rasptank/game/event"
+
 
 # Global variables
 mqtt_client = None
@@ -52,6 +53,7 @@ dualsense_controller = None
 movement_controller = None
 running = True
 tank_status = {"connected": False, "battery": 0, "last_update": 0}
+current_speed_mode = None
 
 
 def signal_handler(sig, frame):
@@ -95,40 +97,35 @@ def send_movement_command(
         logger.error(f"Error sending movement command: {e}")
 
 
-def send_action_command(action: str):
+def send_action_command(action_type: ActionType):
     """Send action commands to the Rasptank via MQTT.
 
     Args:
-        action (str): Action type (e.g., 'shoot', 'pivot', 'camera')
+        action_type (ActionType): Action
     """
     global mqtt_client
 
     if not mqtt_client or not mqtt_client.connected.is_set():
-        logger.warning(f"Cannot send {action} command: MQTT client not connected")
+        logger.warning(f"Cannot send {action_type} command: MQTT client not connected")
         return
 
     try:
         topic = None
         message = ""
 
-        # Determine the appropriate topic based on the action
-        if action == "shoot":
+        # Determine the appropriate topic based on the action type
+        if action_type == ActionType.SHOOT:
             topic = SHOOT_COMMAND_TOPIC
-        elif action == "camera":
-            topic = CAMERA_COMMAND_TOPIC
-        elif action == "action":
-            topic = ACTION_COMMAND_TOPIC
-            message = f"{action}"
         else:
-            logger.warning(f"Unknown action command: {action}")
+            logger.warning(f"Unknown action command: {action_type}")
             return
 
         # Publish the command
-        logger.debug(f"Sending {action} command: {message}")
+        logger.debug(f"Sending {action_type} command: {message}")
         mqtt_client.publish(topic, message, qos=0)
 
     except Exception as e:
-        logger.error(f"Error sending {action} command: {e}")
+        logger.error(f"Error sending {action_type} command: {e}")
 
 
 def handle_status_update(client, topic, payload, qos, retain):
@@ -163,9 +160,6 @@ def handle_status_update(client, topic, payload, qos, retain):
 
             elif status_type == "shot_fired":
                 logger.info("Shot fired by the tank")
-                # Provide shot feedback if controller has feedback
-                if dualsense_controller and hasattr(dualsense_controller, "set_rumble"):
-                    dualsense_controller.set_rumble(65535, 32768, 300)
 
             elif status_type == "camera_moved":
                 logger.debug("Camera position updated")
@@ -226,9 +220,10 @@ def handle_game_event(client, topic, payload, qos, retain):
             )
 
         elif event_type == "hit_by_ir":
-            # Hit by opponent - red flash and strong rumble
-            dualsense_controller.set_led_color(255, 0, 0)  # Red
-            dualsense_controller.set_rumble(65535, 65535, 500)
+            # Hit by opponent
+            shooter = parts[1] if len(parts) > 1 else "Unknown"
+            logger.info(f"Hit by IR shot from {shooter}")
+            dualsense_controller.feedback_collection.on_hit_by_shot(*current_speed_mode.color)
 
         elif event_type == "scanning_qr":
             # QR scanning attempt - distinctive feedback
@@ -279,6 +274,8 @@ def print_dashboard():
         # Movement controller status
         if movement_controller:
             adapter_status = movement_controller.get_status()
+
+            global current_speed_mode
 
             # Display speed mode
             speed_modes = SpeedMode.get_speed_modes()
@@ -478,7 +475,7 @@ def main():
 
                 # Initialize movement controller with the modified adapter
                 logger.info("Initializing controller movement adapter with new control scheme")
-                movement_controller = ControllerMovementAdapter(
+                movement_controller = ControllerAdapter(
                     controller=dualsense_controller,
                     on_movement_command=send_movement_command,
                     on_action_command=send_action_command,
@@ -552,7 +549,7 @@ def main():
                     if movement_controller is None:
                         # Reinitialize movement controller after controller reconnection
                         logger.info("Initializing controller movement adapter after reconnection")
-                        movement_controller = ControllerMovementAdapter(
+                        movement_controller = ControllerAdapter(
                             controller=dualsense_controller,
                             on_movement_command=send_movement_command,
                             on_action_command=send_action_command,

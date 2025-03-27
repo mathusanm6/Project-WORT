@@ -1,7 +1,7 @@
 """
-RaspTank Movement Adapter with improved separation of concerns.
+RaspTank Adapter for Controller Inputs
 
-This adapter converts raw controller inputs into movement commands
+This adapter converts raw controller inputs into commands
 compatible with the RaspTank hardware implementation.
 """
 
@@ -10,6 +10,7 @@ import math
 from typing import Any, Callable, Dict, Optional
 
 # Import from src.common
+from src.common.constants.actions import ActionType
 from src.common.constants.controller import (
     JOYSTICK_DEAD_ZONE,
     JOYSTICK_HORIZONTAL_THRESHOLD,
@@ -36,17 +37,10 @@ from src.dashboard.game_controller.events import (
 logger = logging.getLogger(__name__)
 
 
-class ControllerMovementAdapter:
+class ControllerAdapter:
     """
-    Adapter that converts controller inputs into movement commands
+    Adapter that converts controller inputs into commands
     compatible with the RaspTank hardware implementation.
-
-    Responsibilities:
-    - Convert raw joystick input to thrust and turn directions
-    - Handle speed control based on button presses (L1 decrease, R1 increase)
-    - Manage turning logic
-    - Send movement commands via callbacks
-    - Provide haptic and LED feedback based on movement state
     """
 
     def __init__(
@@ -61,8 +55,8 @@ class ControllerMovementAdapter:
             controller: The DualSense controller to adapt
             on_movement_command: Callback for movement commands
                 Function signature: callback(speed, thrust_direction, turn_direction, turn_factor)
-            on_action_command: Callback for action commands (not used for movement)
-                Function signature: callback(action_name, action_value)
+            on_action_command: Callback for action commands
+                Function signature: callback(action_name)
         """
         self.controller = controller
         self.on_movement_command = on_movement_command
@@ -112,7 +106,7 @@ class ControllerMovementAdapter:
         if self.has_feedback:
             self.controller.set_led_color(*self.speed_modes[self.current_speed_mode_idx].color)
 
-        logger.info("RaspTank Movement Adapter initialized with improved control scheme")
+        logger.info("RaspTank Controller Adapter initialized with DualSense controller")
         logger.info(
             f"Initial speed mode: {self.current_speed_mode_idx} (LOW - {self.speed_values[self.current_speed_mode_idx]}%)"
         )
@@ -200,7 +194,16 @@ class ControllerMovementAdapter:
 
             logger.info(f"R1 pressed. Speed mode after: {self.current_speed_mode_idx}")
 
-        # Other buttons are not used for movement
+        # Shoot using the SQUARE button
+        if button_name == ButtonType.SQUARE.value and pressed:
+            if self.on_action_command:
+                logger.info("Shoot command sent")
+                self.on_action_command(ActionType.SHOOT)
+
+                if self.has_feedback:
+                    self.controller.feedback_collection.on_shoot(
+                        *self.speed_modes[self.current_speed_mode_idx].color
+                    )
 
     def _update_active_dpad_movements(self):
         """Update any active D-pad movements with the current pivot mode and speed."""
@@ -275,14 +278,12 @@ class ControllerMovementAdapter:
             value (float): Trigger value (0.0 to 1.0)
         """
         if trigger_name == TriggerType.R2.value and value > 0.5:
-            # R2 for shooting or other action
-            if self.on_action_command:
-                self.on_action_command("shoot")
+            # R2 for other actions
+            pass
         elif trigger_name == TriggerType.L2.value:
             old_pivot_mode = self.pivot_mode
-
             if value > 0.5:
-                # L2 for activating pivot turn
+                # L2 for switching to pivot mode for D-pad turning
                 self.pivot_mode = True
             else:
                 # L2 released

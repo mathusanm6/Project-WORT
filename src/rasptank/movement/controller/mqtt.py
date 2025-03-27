@@ -9,6 +9,7 @@ import threading
 from typing import Optional
 
 # Import from src.common
+from src.common.constants.movement import MOVEMENT_COMMAND_TOPIC, MOVEMENT_STATE_TOPIC
 from src.common.enum.movement import (
     CurvedTurnRate,
     SpeedMode,
@@ -17,12 +18,11 @@ from src.common.enum.movement import (
     TurnType,
 )
 from src.common.mqtt.client import MQTTClient
-from src.common.mqtt.topics import MOVEMENT_COMMAND_TOPIC, MOVEMENT_STATE_TOPIC
 
 # Import from src.rasptank
 from src.rasptank.movement.controller.base import BaseMovementController
 from src.rasptank.movement.movement_api import State
-from src.rasptank.movement.rasptank_hardware import RasptankHardware
+from src.rasptank.rasptank_hardware import RasptankHardware
 
 # Configure logging
 logger = logging.getLogger("MQTTMovementController")
@@ -46,6 +46,7 @@ class MQTTMovementController(BaseMovementController):
 
     def __init__(
         self,
+        hardware: RasptankHardware,
         mqtt_client: Optional[MQTTClient] = None,
         broker_address: str = "192.168.1.200",
         broker_port: int = 1883,
@@ -64,9 +65,8 @@ class MQTTMovementController(BaseMovementController):
         """
         super().__init__()  # Initialize the base class (BaseMovementController) with default state
 
-        # Initialize hardware adapter
-        self.hardware = RasptankHardware()
-        logger.info("RasptankHardware initialized")
+        # Hardware-specific implementation
+        self.hardware = hardware
 
         # Initialize MQTT client or use provided one
         self.mqtt_client = mqtt_client
@@ -240,11 +240,6 @@ class MQTTMovementController(BaseMovementController):
                 self.pending_timers[timer_id].cancel()
             self.pending_timers.clear()
             logger.info("All timers cancelled")
-
-        # Clean up hardware resources
-        logger.info("Cleaning up hardware resources")
-        self.hardware.cleanup()
-        logger.info("Hardware cleanup complete")
 
         # We don't disconnect the MQTT client here since it might be shared
         # The owning object is responsible for disconnecting the client
