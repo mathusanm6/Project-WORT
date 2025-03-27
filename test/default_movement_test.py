@@ -14,14 +14,22 @@ from src.common.enum.movement import (
     TurnDirection,
     TurnType,
 )
+from src.rasptank.movement.controller.default import DefaultMovementController
 
 # Import from src.rasptank
-from src.rasptank.movement.controller.default import DefaultMovementController
+from src.rasptank.rasptank_hardware import RasptankHardware
 
 
 class DefaultMovementControllerTest:
     def __init__(self):
-        self.movement_controller = DefaultMovementController()
+        try:
+            # Initialize Rasptank hardware
+            self.hardware = RasptankHardware()
+        except Exception as e:
+            print(f"Error initializing hardware: {e}")
+            raise e
+
+        self.movement_controller = DefaultMovementController(self.hardware)
 
     def continuous_movement(
         self,

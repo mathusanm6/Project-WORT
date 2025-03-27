@@ -7,9 +7,10 @@ import uuid
 from time import sleep, time
 
 import Adafruit_PCA9685
-import InfraLib
 import RPi.GPIO as GPIO
 from rpi_ws281x import *
+
+import dashboard.shoot.InfraLib as InfraLib
 
 tests_status = {
     "servo": {"arm": 0, "front_arm": 0, "canon": 0},

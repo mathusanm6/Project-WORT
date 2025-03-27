@@ -13,7 +13,7 @@ from src.common.enum.movement import (
 
 # Import from src.rasptank
 from src.rasptank.movement.controller.base import BaseMovementController
-from src.rasptank.movement.rasptank_hardware import RasptankHardware
+from src.rasptank.rasptank_hardware import RasptankHardware
 
 
 class DefaultMovementController(BaseMovementController):
@@ -22,11 +22,11 @@ class DefaultMovementController(BaseMovementController):
     This controller directly interacts with the hardware to control the movement of the Rasptank.
     """
 
-    def __init__(self):
+    def __init__(self, hardware: RasptankHardware):
         super().__init__()
 
-        # Initialize hardware adapter
-        self.hardware = RasptankHardware()
+        # Hardware-specific implementation
+        self.hardware = hardware
 
         # For handling timed movements
         self.timer_lock = threading.Lock()
@@ -59,6 +59,3 @@ class DefaultMovementController(BaseMovementController):
             for timer_id in list(self.pending_timers.keys()):
                 self.pending_timers[timer_id].cancel()
             self.pending_timers.clear()
-
-        # Clean up hardware resources
-        self.hardware.cleanup()

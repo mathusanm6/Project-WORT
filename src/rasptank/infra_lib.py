@@ -6,10 +6,7 @@
 
 import ctypes
 import math
-import multiprocessing
-import threading
 import time
-import uuid
 from datetime import datetime
 from functools import reduce
 
@@ -382,4 +379,5 @@ def getSignal(channel, verbose=False):
         data = removeRedundantBits(data, r)
 
         shooter = hex(int(str("".join(str(x) for x in data)), 2))
-        return shooter
+
+    return shooter

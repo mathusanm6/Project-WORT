@@ -4,6 +4,9 @@ Main script for Rasptank with MQTT control.
 This script initializes all the required components for the Rasptank
 to be controlled via MQTT from a PC with a DualSense controller.
 """
+import faulthandler
+
+faulthandler.enable()
 
 import argparse
 import logging
@@ -11,10 +14,18 @@ import signal
 import sys
 import threading
 import time
+from queue import Empty
 
+# Import from src.common
+from src.common.constants.actions import SHOOT_COMMAND_TOPIC
+from src.common.constants.game import STATUS_TOPIC
+from src.common.constants.movement import MOVEMENT_COMMAND_TOPIC, MOVEMENT_STATE_TOPIC
 from src.common.mqtt.client import MQTTClient
-from src.common.mqtt.topics import MOVEMENT_COMMAND_TOPIC, MOVEMENT_STATE_TOPIC
+from src.rasptank.action import ActionController
 from src.rasptank.movement.controller.mqtt import MQTTMovementController
+
+# Import from src.rasptank
+from src.rasptank.rasptank_hardware import RasptankHardware, RasptankLed
 
 # Configure logging
 logging.basicConfig(
@@ -23,28 +34,27 @@ logging.basicConfig(
 logger = logging.getLogger("RasptankMain")
 
 # MQTT Topics
-SHOOT_COMMAND_TOPIC = "rasptank/action/shoot"
 CAMERA_COMMAND_TOPIC = "rasptank/camera/command"
-STATUS_TOPIC = "rasptank/status"
 
 # Global variables for resources that need cleanup
+rasptank_hardware = None
+rasptank_led = None
 mqtt_client = None
 movement_controller = None
-shoot_controller = None
-camera_controller = None
+action_controller = None
 running = True
 
 
 def signal_handler(sig, frame):
     """Handle termination signals gracefully."""
     global running
-    logger.info("Termination signal received, shutting down...")
+    logging.info(f"Signal {sig} received. Stopping gracefully...")
     running = False
 
 
 def cleanup():
     """Clean up all resources."""
-    global mqtt_client, movement_controller, shoot_controller, camera_controller
+    global mqtt_client, movement_controller, action_controller, rasptank_hardware, rasptank_led
 
     # Clean up movement controller
     if movement_controller:
@@ -55,25 +65,23 @@ def cleanup():
         except Exception as e:
             logger.error(f"Error cleaning up movement controller: {e}")
 
-    # Clean up shoot controller if exists
-    if shoot_controller:
+    # Clean up Rasptank hardware (including IR receiver polling)
+    if rasptank_hardware:
         try:
-            logger.info("Cleaning up shoot controller")
-            # Implementation depends on your shoot controller class
-            pass
+            logger.info("Cleaning up Rasptank hardware")
+            rasptank_hardware.cleanup()
         except Exception as e:
-            logger.error(f"Error cleaning up shoot controller: {e}")
+            logger.error(f"Error cleaning up Rasptank hardware: {e}")
 
-    # Clean up camera controller if exists
-    if camera_controller:
+    # Clean up Rasptank LED
+    if rasptank_led:
         try:
-            logger.info("Cleaning up camera controller")
-            # Implementation depends on your camera controller class
-            pass
+            logger.info("Cleaning up Rasptank LED")
+            rasptank_led.cleanup()
         except Exception as e:
-            logger.error(f"Error cleaning up camera controller: {e}")
+            logger.error(f"Error cleaning up Rasptank LED: {e}")
 
-    # Clean up MQTT client
+    # Disconnect MQTT client
     if mqtt_client:
         try:
             logger.info("Disconnecting MQTT client")
@@ -95,20 +103,25 @@ def handle_shoot_command(client, topic, payload, qos, retain):
     try:
         logger.info(f"Shoot command received: {payload}")
 
-        # Parse power level if provided
-        power = 100
-        if payload and payload.strip():
-            try:
-                power = float(payload)
-            except ValueError:
-                pass
+        # Set LED to indicate shot fired
+        try:
+            pass
+        except Exception as led_error:
+            logger.error(f"Error setting LED: {led_error}")
 
-        # TODO: Implement actual IR shooting mechanism
-        # This could involve triggering an IR LED through GPIO
-        logger.info(f"Shooting with power level: {power}")
+        # Use IRBlast to send the IR signal
+        if not action_controller:
+            logger.error("Action controller not initialized")
+            return
 
-        # Publish confirmation
-        client.publish(STATUS_TOPIC, f"shot_fired;{power}", qos=0)
+        success = action_controller.shoot(verbose=(logger.level == logging.INFO))
+
+        if success:
+            logger.info("IR blast successfully sent")
+            # Publish confirmation to allow controller feedback
+            client.publish(STATUS_TOPIC, "shot_fired", qos=0)
+        else:
+            logger.error("Failed to send IR blast")
 
     except Exception as e:
         logger.error(f"Error handling shoot command: {e}")
@@ -193,7 +206,7 @@ def parse_arguments():
 
 def main():
     """Main entry point."""
-    global mqtt_client, movement_controller, running
+    global rasptank_hardware, rasptank_led, mqtt_client, movement_controller, running
 
     # Parse command line arguments
     args = parse_arguments()
@@ -203,7 +216,6 @@ def main():
         logging.getLogger().setLevel(logging.DEBUG)
         logger.setLevel(logging.DEBUG)
 
-    # Set up signal handlers
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
@@ -222,13 +234,46 @@ def main():
             logger.error("Failed to connect to MQTT broker")
             return 1
 
-        # Initialize MQTT movement controller
+        # Initialize Rasptank hardware
+        logger.info("Initializing Rasptank hardware")
+        try:
+            rasptank_hardware = RasptankHardware()
+        except Exception as e:
+            logger.error(f"Error initializing Rasptank hardware: {e}")
+            return 1
+
+        # Initialize Rasptank LED
+        logger.info("Initializing Rasptank LED")
+        try:
+            rasptank_led = RasptankLed()
+        except Exception as e:
+            logger.error(f"Error initializing Rasptank LED: {e}")
+            return 1
+
+        time.sleep(0.2)  # Give the LED time to initialize
+
+        # Initialize MQTT move  ment controller
         logger.info("Initializing MQTT movement controller")
         movement_controller = MQTTMovementController(
+            hardware=rasptank_hardware,
             mqtt_client=mqtt_client,
             command_topic=MOVEMENT_COMMAND_TOPIC,
             state_topic=MOVEMENT_STATE_TOPIC,
         )
+
+        # Initialize action controller
+        logger.info("Initializing action controller")
+        global action_controller
+        action_controller = ActionController(rasptank_hardware)
+
+        # Set up IR receiver for detecting shots
+        if rasptank_hardware.setup_ir_receiver(mqtt_client):
+            logger.info("IR receiver setup complete")
+        else:
+            logger.error("IR receiver setup failed")
+            return 1
+
+        time.sleep(0.2)  # Give the IR polling thread time to initialize
 
         # Set up handler for shoot commands
         mqtt_client.subscribe(topic=SHOOT_COMMAND_TOPIC, qos=0, callback=handle_shoot_command)
@@ -243,13 +288,30 @@ def main():
 
         # Main loop - keep the program running
         while running:
+            # Set up signal handlers (to avoid MQTT taking over)
+            signal.signal(signal.SIGINT, signal_handler)
+            signal.signal(signal.SIGTERM, signal_handler)
+
+            try:
+                # Use a small timeout to prevent blocking indefinitely
+                command = rasptank_hardware.led_command_queue.get(timeout=0.1)
+                if command == "hit":
+                    logging.info("Hit event processed in main loop")
+                    rasptank_led.hit_animation()
+            except Empty:
+                # No commands in queue, continue
+                pass
+            except Exception as e:
+                logging.error(f"Error in main loop: {e}")
+
+            # Add a small sleep to reduce CPU usage
             time.sleep(0.1)
 
-    except Exception as e:
-        logger.error(f"Error in main loop: {e}")
-        return 1
+    except KeyboardInterrupt:
+        logging.info("KeyboardInterrupt detected, exiting gracefully...")
+        running = False
     finally:
-        # Clean up resources
+        logging.info("Cleaning up resources...")
         cleanup()
 
     logger.info("Rasptank shutdown complete")
