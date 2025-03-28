@@ -10,10 +10,10 @@ from src.common.enum.movement import (
     TurnDirection,
     TurnType,
 )
+from src.rasptank.hardware.main import RasptankHardware
 
 # Import from src.rasptank
 from src.rasptank.movement.controller.base import BaseMovementController
-from src.rasptank.rasptank_hardware import RasptankHardware
 
 
 class DefaultMovementController(BaseMovementController):
@@ -43,7 +43,7 @@ class DefaultMovementController(BaseMovementController):
         """Apply the movement to the hardware."""
 
         # Apply movement to hardware
-        self.hardware.move_hardware(
+        self.hardware.move_rasptank_hardware(
             thrust_direction, turn_direction, turn_type, speed_mode, curved_turn_rate
         )
 

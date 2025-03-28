@@ -4,10 +4,6 @@ Main script for Rasptank with MQTT control.
 This script initializes all the required components for the Rasptank
 to be controlled via MQTT from a PC with a DualSense controller.
 """
-import faulthandler
-
-faulthandler.enable()
-
 import argparse
 import logging
 import signal
@@ -22,10 +18,10 @@ from src.common.constants.game import STATUS_TOPIC
 from src.common.constants.movement import MOVEMENT_COMMAND_TOPIC, MOVEMENT_STATE_TOPIC
 from src.common.mqtt.client import MQTTClient
 from src.rasptank.action import ActionController
-from src.rasptank.movement.controller.mqtt import MQTTMovementController
 
 # Import from src.rasptank
-from src.rasptank.rasptank_hardware import RasptankHardware, RasptankLed
+from src.rasptank.hardware.main import RasptankHardware
+from src.rasptank.movement.controller.mqtt import MQTTMovementController
 
 # Configure logging
 logging.basicConfig(
@@ -38,7 +34,6 @@ CAMERA_COMMAND_TOPIC = "rasptank/camera/command"
 
 # Global variables for resources that need cleanup
 rasptank_hardware = None
-rasptank_led = None
 mqtt_client = None
 movement_controller = None
 action_controller = None
@@ -54,7 +49,7 @@ def signal_handler(sig, frame):
 
 def cleanup():
     """Clean up all resources."""
-    global mqtt_client, movement_controller, action_controller, rasptank_hardware, rasptank_led
+    global mqtt_client, movement_controller, action_controller, rasptank_hardware
 
     # Clean up movement controller
     if movement_controller:
@@ -72,14 +67,6 @@ def cleanup():
             rasptank_hardware.cleanup()
         except Exception as e:
             logger.error(f"Error cleaning up Rasptank hardware: {e}")
-
-    # Clean up Rasptank LED
-    if rasptank_led:
-        try:
-            logger.info("Cleaning up Rasptank LED")
-            rasptank_led.cleanup()
-        except Exception as e:
-            logger.error(f"Error cleaning up Rasptank LED: {e}")
 
     # Disconnect MQTT client
     if mqtt_client:
@@ -206,54 +193,39 @@ def parse_arguments():
 
 def main():
     """Main entry point."""
-    global rasptank_hardware, rasptank_led, mqtt_client, movement_controller, running
+    global rasptank_hardware, mqtt_client, movement_controller, action_controller, running
 
     # Parse command line arguments
     args = parse_arguments()
 
-    # Set log level based on arguments
-    if args.debug:
-        logging.getLogger().setLevel(logging.DEBUG)
-        logger.setLevel(logging.DEBUG)
+    # Configure logging level
+    logging_level = logging.DEBUG if args.debug else logging.INFO
+    logging.getLogger().setLevel(logging_level)
+    logger.setLevel(logging_level)
 
+    # Setup signal handlers
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
+    # Initialize resources
     try:
-        # Initialize MQTT client
-        logger.info(f"Initializing MQTT client, connecting to {args.broker}:{args.port}")
+        # Initialize MQTT Client
+        logger.info(f"Connecting to MQTT broker at {args.broker}:{args.port}")
         mqtt_client = MQTTClient(
             broker_address=args.broker, broker_port=args.port, client_id=args.client_id
         )
 
-        # Connect to MQTT broker
-        mqtt_client.connect()
-
-        # Wait for connection to establish
-        if not mqtt_client.wait_for_connection(timeout=10.0):
-            logger.error("Failed to connect to MQTT broker")
+        if not mqtt_client.connect() or not mqtt_client.wait_for_connection(timeout=10):
+            logger.error("Unable to connect to MQTT broker")
             return 1
 
-        # Initialize Rasptank hardware
+        # Initialize Rasptank Hardware
         logger.info("Initializing Rasptank hardware")
-        try:
-            rasptank_hardware = RasptankHardware()
-        except Exception as e:
-            logger.error(f"Error initializing Rasptank hardware: {e}")
-            return 1
+        rasptank_hardware = RasptankHardware()
+        time.sleep(0.2)  # hardware initialization pause
 
-        # Initialize Rasptank LED
-        logger.info("Initializing Rasptank LED")
-        try:
-            rasptank_led = RasptankLed()
-        except Exception as e:
-            logger.error(f"Error initializing Rasptank LED: {e}")
-            return 1
-
-        time.sleep(0.2)  # Give the LED time to initialize
-
-        # Initialize MQTT move  ment controller
-        logger.info("Initializing MQTT movement controller")
+        # Initialize MQTT Movement Controller
+        logger.info("Initializing MQTT Movement Controller")
         movement_controller = MQTTMovementController(
             hardware=rasptank_hardware,
             mqtt_client=mqtt_client,
@@ -261,57 +233,55 @@ def main():
             state_topic=MOVEMENT_STATE_TOPIC,
         )
 
-        # Initialize action controller
-        logger.info("Initializing action controller")
-        global action_controller
+        # Initialize Action Controller
+        logger.info("Initializing Action Controller")
         action_controller = ActionController(rasptank_hardware)
 
-        # Set up IR receiver for detecting shots
-        if rasptank_hardware.setup_ir_receiver(mqtt_client):
-            logger.info("IR receiver setup complete")
-        else:
+        # IR Receiver setup
+        logger.info("Setting up IR receiver")
+        if not rasptank_hardware.ir_receiver.setup_ir_receiver(
+            client=mqtt_client, led_command_queue=rasptank_hardware.get_led_command_queue()
+        ):
             logger.error("IR receiver setup failed")
             return 1
 
-        time.sleep(0.2)  # Give the IR polling thread time to initialize
+        time.sleep(0.2)
 
-        # Set up handler for shoot commands
-        mqtt_client.subscribe(topic=SHOOT_COMMAND_TOPIC, qos=0, callback=handle_shoot_command)
+        # MQTT Subscriptions
+        mqtt_client.subscribe(SHOOT_COMMAND_TOPIC, qos=0, callback=handle_shoot_command)
+        mqtt_client.subscribe(CAMERA_COMMAND_TOPIC, qos=0, callback=handle_camera_command)
 
-        # Set up handler for camera commands
-        mqtt_client.subscribe(topic=CAMERA_COMMAND_TOPIC, qos=0, callback=handle_camera_command)
-
-        # Start periodic status updates
+        # Periodic status updates
         publish_status_update()
 
-        logger.info("Rasptank initialized and ready for commands")
+        logger.info("Rasptank initialization complete")
 
-        # Main loop - keep the program running
+        # Main event loop
         while running:
-            # Set up signal handlers (to avoid MQTT taking over)
-            signal.signal(signal.SIGINT, signal_handler)
-            signal.signal(signal.SIGTERM, signal_handler)
+            # Setup signal handlers (once)
+            if int(time.time()) % 2 == 0:
+                signal.signal(signal.SIGINT, signal_handler)
+                signal.signal(signal.SIGTERM, signal_handler)
 
             try:
-                # Use a small timeout to prevent blocking indefinitely
                 command = rasptank_hardware.led_command_queue.get(timeout=0.1)
                 if command == "hit":
-                    logging.info("Hit event processed in main loop")
-                    rasptank_led.hit_animation()
+                    logger.info("Hit event processed in main loop")
+                    rasptank_hardware.led_strip.hit_animation()
             except Empty:
-                # No commands in queue, continue
-                pass
+                pass  # Normal condition, no commands in queue
             except Exception as e:
-                logging.error(f"Error in main loop: {e}")
+                logger.error(f"Error in main loop: {e}")
 
-            # Add a small sleep to reduce CPU usage
-            time.sleep(0.1)
+            time.sleep(0.05)  # Slight CPU optimization
 
     except KeyboardInterrupt:
-        logging.info("KeyboardInterrupt detected, exiting gracefully...")
-        running = False
+        logger.info("KeyboardInterrupt detected, exiting...")
+    except Exception as e:
+        logger.error(f"Unexpected error in main loop: {e}", exc_info=True)
+        return 1
     finally:
-        logging.info("Cleaning up resources...")
+        logger.info("Commencing cleanup...")
         cleanup()
 
     logger.info("Rasptank shutdown complete")

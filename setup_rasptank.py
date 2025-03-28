@@ -175,6 +175,13 @@ To activate the virtual environment manually in the future, run:
 """
 )
 
-print("Rebooting system in 5 seconds...")
-time.sleep(5)
-os.system("sudo reboot")
+if not args.no_reboot:
+    user_input = input("Do you want to reboot the system now? (yes/no): ").strip().lower()
+    if user_input == "yes":
+        print("Rebooting system in 5 seconds...")
+        time.sleep(5)
+        os.system("sudo reboot")
+    else:
+        print("Reboot canceled. Please reboot the system manually to apply changes.")
+else:
+    print("Automatic reboot disabled. Please reboot the system manually to apply changes.")
