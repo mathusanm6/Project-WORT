@@ -5,6 +5,7 @@
 """This script sets up the Raspberry Pi for the Adeept RaspTank project.
 It installs necessary system dependencies and Python packages in a virtual environment."""
 
+import argparse
 import os
 import subprocess
 import sys
@@ -13,6 +14,13 @@ import time
 curpath = os.path.realpath(__file__)
 thisPath = "/" + os.path.dirname(curpath)
 project_root = os.path.dirname(curpath)  # This is Project-WORT folder
+
+# Parse command-line arguments
+parser = argparse.ArgumentParser(description="Setup script for RaspTank project.")
+parser.add_argument(
+    "--no-reboot", action="store_true", help="Disable automatic reboot after setup."
+)
+args = parser.parse_args()
 
 
 def replace_num(file, initial, new_num):
