@@ -134,8 +134,10 @@ class RasptankLedStrip:
     def cleanup(self):
         """Clean up resources before exiting."""
 
+        self.turn_off()
+        time.sleep(0.1)
+
         self.animation_thread.stop()
         self.animation_thread.join(timeout=1)
 
-        self.turn_off()
         logging.info("LED strip cleanup complete")
