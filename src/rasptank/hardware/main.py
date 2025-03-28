@@ -15,9 +15,8 @@ from src.common.enum.movement import (
 )
 from src.rasptank.hardware.infrared import InfraEmitter, InfraReceiver
 from src.rasptank.hardware.led_strip import RasptankLedStrip
-
-# Import from src.rasptank
 from src.rasptank.hardware.motors import Direction, RasptankMotors
+from src.rasptank.hardware.tracking_module import TrackingModule
 
 
 class RasptankHardware:
@@ -40,6 +39,9 @@ class RasptankHardware:
 
         # Initialize IR receiver
         self.ir_receiver = InfraReceiver()
+
+        # Initialize tracking module
+        self.tracking_module = TrackingModule()
 
     def get_led_command_queue(self):
         """Get the LED command queue."""
@@ -147,6 +149,10 @@ class RasptankHardware:
     def blast_ir(self, verbose: bool = False):
         """Blast an IR signal."""
         return self.ir_emitter.blast(verbose=verbose)
+
+    def is_on_top_of_capture_zone(self) -> bool:
+        """Check if the Rasptank is on top of the capture zone."""
+        return self.tracking_module.is_white_in_middle()
 
     def cleanup(self):
         """Clean up rasptank hardware."""

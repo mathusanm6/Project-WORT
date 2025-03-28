@@ -100,16 +100,12 @@ class InfraReceiver:
         """Set up the IR receiver for detecting hits."""
         try:
             # Start a separate thread for continuous polling
-            logging.info("Setting up IR receiver...")
             self.ir_polling_thread = threading.Thread(
                 target=self.poll_ir_receiver,
                 args=(IrPins.RECEIVER.value, client, led_command_queue),
                 daemon=True,
             )
-            logging.info(f"Starting IR receiver polling on GPIO {IrPins.RECEIVER.value}...")
             self.ir_polling_thread.start()
-            logging.info("IR receiver setup complete")
-
             return True
         except Exception as e:
             logging.error(f"Error setting up IR receiver: {e}")
