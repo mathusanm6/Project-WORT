@@ -14,12 +14,13 @@ from queue import Empty
 
 # Import from src.common
 from src.common.constants.actions import SHOOT_COMMAND_TOPIC
-from src.common.constants.game import STATUS_TOPIC
+from src.common.constants.game import FLAG_CAPTURE_DURATION, GAME_EVENT_TOPIC, STATUS_TOPIC
 from src.common.constants.movement import MOVEMENT_COMMAND_TOPIC, MOVEMENT_STATE_TOPIC
 from src.common.mqtt.client import MQTTClient
 from src.rasptank.action import ActionController
 
 # Import from src.rasptank
+from src.rasptank.hardware.led_strip import LedStripState
 from src.rasptank.hardware.main import RasptankHardware
 from src.rasptank.movement.controller.mqtt import MQTTMovementController
 
@@ -149,6 +150,86 @@ def handle_camera_command(client, topic, payload, qos, retain):
         logger.error(f"Error handling camera command: {e}")
 
 
+def handle_flag_capture_logic() -> bool:
+    """
+    Checks whether the Rasptank is on the capture zone and handles
+    the full capture logic (timing, MQTT events, animations).
+    """
+    global rasptank_hardware, mqtt_client
+
+    is_flag_captured = False
+
+    # Track whether the tank is currently on the zone
+    is_on_zone = rasptank_hardware.is_on_top_of_capture_zone()
+
+    if not hasattr(handle_flag_capture_logic, "was_on_zone_last_frame"):
+        handle_flag_capture_logic.was_on_zone_last_frame = False
+
+    if is_on_zone:
+        if not handle_flag_capture_logic.was_on_zone_last_frame:
+            # Just entered the zone
+            rasptank_hardware.capture_start_time = time.time()
+            logging.info("Starting capturing animation")
+            rasptank_hardware.led_strip.capturing_animation()
+
+            if mqtt_client:
+                try:
+                    mqtt_client.publish(
+                        topic=GAME_EVENT_TOPIC,
+                        payload="capturing_flag;started",
+                        qos=1,
+                    )
+                except Exception as e:
+                    logging.error(f"Failed to publish flag capturing started event: {e}")
+        else:
+            # Still on zone, check duration
+            if rasptank_hardware.capture_start_time is not None:
+                capture_duration = time.time() - rasptank_hardware.capture_start_time
+                if capture_duration >= FLAG_CAPTURE_DURATION:
+                    logging.info("Flag captured successfully")
+                    rasptank_hardware.led_strip.stop_animations()
+                    rasptank_hardware.led_strip.flag_possessed()
+
+                    is_flag_captured = True
+
+                    if mqtt_client:
+                        try:
+                            mqtt_client.publish(
+                                topic=GAME_EVENT_TOPIC,
+                                payload="capturing_flag;captured",
+                                qos=1,
+                            )
+                        except Exception as e:
+                            logging.error(f"Failed to publish flag captured event: {e}")
+                    rasptank_hardware.capture_start_time = None
+    else:
+        if (
+            handle_flag_capture_logic.was_on_zone_last_frame
+            and rasptank_hardware.capture_start_time
+        ):
+            # Just exited the zone before completing capture
+            capture_duration = time.time() - rasptank_hardware.capture_start_time
+            if capture_duration < FLAG_CAPTURE_DURATION:
+                logging.info("Flag capture failed due to insufficient duration")
+                rasptank_hardware.led_strip.stop_animations()
+
+                if mqtt_client:
+                    try:
+                        mqtt_client.publish(
+                            topic=GAME_EVENT_TOPIC,
+                            payload="capturing_flag;failed",
+                            qos=1,
+                        )
+                    except Exception as e:
+                        logging.error(f"Failed to publish flag capture failed event: {e}")
+            rasptank_hardware.capture_start_time = None
+
+    # Update tracking for next loop
+    handle_flag_capture_logic.was_on_zone_last_frame = is_on_zone
+
+    return is_flag_captured
+
+
 def publish_status_update():
     """Publish periodic status updates."""
     global mqtt_client, running
@@ -263,6 +344,9 @@ def main():
                 signal.signal(signal.SIGINT, signal_handler)
                 signal.signal(signal.SIGTERM, signal_handler)
 
+            # Call the flag capture logic
+            handle_flag_capture_logic()
+
             try:
                 command = rasptank_hardware.led_command_queue.get(timeout=0.1)
                 if command == "hit":
@@ -273,7 +357,7 @@ def main():
             except Exception as e:
                 logger.error(f"Error in main loop: {e}")
 
-            time.sleep(0.05)  # Slight CPU optimization
+            time.sleep(0.05)  # 50ms
 
     except KeyboardInterrupt:
         logger.info("KeyboardInterrupt detected, exiting...")

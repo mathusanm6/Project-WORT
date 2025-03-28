@@ -204,21 +204,34 @@ def handle_game_event(client, topic, payload, qos, retain):
             )
 
         elif event_type == "capturing_flag":
-            # Flag capture in progress - faster pulsing
-            progress = float(parts[1]) if len(parts) > 1 else 0
-            intensity = int(20000 + (45535 * progress / 100.0))
-            pulse_rate = 500 - int(300 * progress / 100.0)  # Faster pulses as progress increases
-            dualsense_controller.feedback.pulse_rumble(
-                intensity=intensity, duration_sec=1, pattern_ms=pulse_rate
-            )
+            if len(parts) < 2:
+                return
 
-        elif event_type == "flag_captured":
-            # Flag captured - strong victory feedback
-            dualsense_controller.set_led_color(0, 0, 255)  # Blue
-            dualsense_controller.feedback.pulse_rumble(
-                intensity=40000, duration_sec=2, pattern_ms=100
-            )
-
+            capture_flag_state = parts[1]
+            if capture_flag_state == "started":
+                if current_speed_mode:
+                    dualsense_controller.feedback_collection.on_flag_capture_started(
+                        *current_speed_mode.color
+                    )
+                else:
+                    dualsense_controller.feedback_collection.on_flag_capture_started(255, 255, 255)
+            elif capture_flag_state == "captured":
+                if current_speed_mode:
+                    dualsense_controller.feedback_collection.on_flag_captured(
+                        *current_speed_mode.color
+                    )
+                else:
+                    dualsense_controller.feedback_collection.on_flag_captured(255, 255, 255)
+            elif capture_flag_state == "failed":
+                if current_speed_mode:
+                    dualsense_controller.feedback_collection.on_flag_capture_failed(
+                        *current_speed_mode.color
+                    )
+                else:
+                    dualsense_controller.feedback_collection.on_flag_capture_failed(255, 255, 255)
+            else:
+                # Unknown state
+                logger.warning(f"Unknown flag capture state: {capture_flag_state}")
         elif event_type == "hit_by_ir":
             # Hit by opponent
             shooter = parts[1] if len(parts) > 1 else "Unknown"
