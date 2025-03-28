@@ -4,7 +4,7 @@ The Action class is responsible for handling the actions of the Rasptank
 such as shooting.
 """
 
-from src.rasptank.rasptank_hardware import RasptankHardware
+from src.rasptank.hardware.main import RasptankHardware
 
 
 class ActionController:
@@ -22,7 +22,7 @@ class ActionController:
         Returns:
             bool: True if the shoot action was successful, False otherwise.
         """
-        return self.hardware.shoot_infrared(verbose=verbose)
+        return self.hardware.blast_ir(verbose=verbose)
 
     def cleanup(self):
         """Clean up resources."""

@@ -18,11 +18,11 @@ from src.common.enum.movement import (
     TurnType,
 )
 from src.common.mqtt.client import MQTTClient
+from src.rasptank.hardware.main import RasptankHardware
 
 # Import from src.rasptank
 from src.rasptank.movement.controller.base import BaseMovementController
 from src.rasptank.movement.movement_api import State
-from src.rasptank.rasptank_hardware import RasptankHardware
 
 # Configure logging
 logger = logging.getLogger("MQTTMovementController")
@@ -211,7 +211,7 @@ class MQTTMovementController(BaseMovementController):
         )
 
         # Apply movement to hardware
-        self.hardware.move_hardware(
+        self.hardware.move_rasptank_hardware(
             thrust_direction, turn_direction, turn_type, speed_mode, curved_turn_rate
         )
 

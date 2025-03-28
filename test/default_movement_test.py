@@ -4,7 +4,11 @@ This script demonstrates the capabilities of the Rasptank by performing a series
 It directly interacts with the hardware to control the movement of the Rasptank.
 """
 
+import logging
 import time
+
+# Import from src.rasptank
+from rasptank.hardware.main import RasptankHardware
 
 # Import from src.common
 from src.common.enum.movement import (
@@ -16,9 +20,6 @@ from src.common.enum.movement import (
 )
 from src.rasptank.movement.controller.default import DefaultMovementController
 
-# Import from src.rasptank
-from src.rasptank.rasptank_hardware import RasptankHardware
-
 
 class DefaultMovementControllerTest:
     def __init__(self):
@@ -26,7 +27,7 @@ class DefaultMovementControllerTest:
             # Initialize Rasptank hardware
             self.hardware = RasptankHardware()
         except Exception as e:
-            print(f"Error initializing hardware: {e}")
+            logging.error("Failed to initialize Rasptank hardware")
             raise e
 
         self.movement_controller = DefaultMovementController(self.hardware)

@@ -223,7 +223,11 @@ def handle_game_event(client, topic, payload, qos, retain):
             # Hit by opponent
             shooter = parts[1] if len(parts) > 1 else "Unknown"
             logger.info(f"Hit by IR shot from {shooter}")
-            dualsense_controller.feedback_collection.on_hit_by_shot(*current_speed_mode.color)
+
+            if current_speed_mode:
+                dualsense_controller.feedback_collection.on_hit_by_shot(*current_speed_mode.color)
+            else:
+                dualsense_controller.feedback_collection.on_hit_by_shot(255, 255, 255)
 
         elif event_type == "scanning_qr":
             # QR scanning attempt - distinctive feedback

@@ -279,7 +279,7 @@ class ControllerAdapter:
         """
         if trigger_name == TriggerType.R2.value and value > 0.5:
             # R2 for other actions
-            pass
+            logger.debug(f"R2 trigger pressed with value: {value}")
         elif trigger_name == TriggerType.L2.value:
             old_pivot_mode = self.pivot_mode
             if value > 0.5:
