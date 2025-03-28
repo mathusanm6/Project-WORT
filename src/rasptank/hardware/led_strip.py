@@ -101,35 +101,36 @@ class RasptankLedStrip:
 
     def hit_animation(self, duration=2.0):
         self.strip.begin()
+        self.current_state = LedStripState.HIT
         self.animation_thread.set_animation(AnimationType.HIT, duration)
 
     def capturing_animation(self):
         self.strip.begin()
+        self.current_state = LedStripState.CAPTURING
         self.animation_thread.set_animation(
             AnimationType.CAPTURING, duration=9999
         )  # Infinite until stopped explicitly
 
     def scored_animation(self, duration=3.0):
         self.strip.begin()
+        self.current_state = LedStripState.SCORED
         self.animation_thread.set_animation(AnimationType.SCORED, duration)
 
     def flag_possessed(self, duration=9999):
         self.strip.begin()
+        self.current_state = LedStripState.FLAG_POSSESSED
         self.animation_thread.set_animation(AnimationType.FLAG_POSSESSED, duration)
-
-    def reset_to_team_color(self):
-        self.strip.begin()
-        self.animation_thread.set_animation(AnimationType.TEAM_COLOR, duration=0.1)
 
     def stop_animations(self):
         self.strip.begin()
-
-        # Resetting to team color stops any long-running animation (like capturing)
-        self.reset_to_team_color()
+        self.current_state = self.team_color
+        self.animation_thread.stop_animation()
+        self.set_color(self.team_color)
 
     def turn_off(self):
         """Turn off all LEDs."""
         self.strip.begin()
+        self.current_state = LedStripState.IDLE
         self.set_color(self.COLOR_OFF)
 
     def cleanup(self):

@@ -1,12 +1,13 @@
 """This module holds a collection of feedback mechanisms for the Dualsense controller."""
 
 import math
-import random
 import threading
 import time
 
-# Import from src.common
 from src.common.constants.controller import BATTERY_CRITICAL_LEVEL, BATTERY_WARNING_LEVEL
+
+# Import from src.common
+from src.common.constants.game import FLAG_CAPTURE_DURATION
 from src.common.enum.movement import (
     CurvedTurnRate,
     SpeedMode,
@@ -22,6 +23,7 @@ from src.dashboard.game_controller.dualsense_feedback import DualSenseFeedback
 class DualsenseFeedbackCollection:
     def __init__(self, feedback: DualSenseFeedback):
         self.feedback = feedback
+        self.is_flag_capturing = False
 
     def on_speed_out_of_bound(self, r: int, g: int, b: int) -> None:
         """
@@ -301,29 +303,58 @@ class DualsenseFeedbackCollection:
         # Restore LED to previous color immediately
         self.feedback.set_led_color(prev_r, prev_g, prev_b)
 
-    def feedback_flag_captured(self):
+    def on_flag_capture_started(self, prev_r: int, prev_g: int, prev_b: int) -> None:
+        """Provide feedback when flag capture starts."""
+        self.is_flag_capturing = True
+
+        def _led_flash_during_capture():
+            start_time = time.time()
+            while time.time() - start_time < FLAG_CAPTURE_DURATION and self.is_flag_capturing:
+                self.feedback.set_led_color(255, 0, 255)  # Purple
+                self.feedback.set_rumble(65535, 65535, 200)
+                time.sleep(0.1)
+                self.feedback.set_led_color(0, 0, 0)
+                self.feedback.set_rumble(0, 0, 200)
+                time.sleep(0.1)
+
+            self.feedback.set_led_color(255, 0, 255)  # Purple
+
+        # Run LED feedback in background so it can stop when capture fails
+        t = threading.Thread(target=_led_flash_during_capture)
+        t.daemon = True
+        t.start()
+
+    def on_flag_captured(self, prev_r: int, prev_g: int, prev_b: int) -> None:
         """Provide feedback when flag is captured."""
-        # Celebratory pulsing pattern
-        self.pulse_rumble(intensity=32767, duration_sec=2, pattern_ms=200)
+        self.is_flag_capturing = False
 
         # Flash LED green
         for _ in range(5):
-            self.set_led_color(0, 255, 0)  # Green
+            self.feedback.set_led_color(0, 255, 0)  # Green
+            self.feedback.set_rumble(65535, 65535, 200)
             time.sleep(0.1)
-            self.set_led_color(0, 0, 0)  # Off
+            self.feedback.set_led_color(0, 0, 0)  # Off
+            self.feedback.set_rumble(0, 0, 200)
             time.sleep(0.1)
 
-    def feedback_flag_dropped(self):
-        """Provide feedback when flag is dropped."""
-        # Sad feedback - low intensity longer duration
-        self.set_rumble(20000, 10000, 500)
+        # Restore LED to previous color immediately
+        self.feedback.set_led_color(prev_r, prev_g, prev_b)
+
+    def on_flag_capture_failed(self, prev_r: int, prev_g: int, prev_b: int) -> None:
+        """Provide feedback when flag capture fails."""
+        self.is_flag_capturing = False
 
         # Flash LED blue
         for _ in range(2):
-            self.set_led_color(0, 0, 255)  # Blue
+            self.feedback.set_led_color(255, 0, 0)  # Red
+            self.feedback.set_rumble(65535, 65535, 200)
             time.sleep(0.2)
-            self.set_led_color(0, 0, 0)  # Off
+            self.feedback.set_led_color(0, 0, 0)  # Off
+            self.feedback.set_rumble(0, 0, 200)
             time.sleep(0.2)
+
+        # Restore LED to previous color immediately
+        self.feedback.set_led_color(prev_r, prev_g, prev_b)
 
     def update_for_battery(self, battery_level: int) -> bool:
         """Update LED based on battery level.
@@ -334,23 +365,23 @@ class DualsenseFeedbackCollection:
         Returns:
             bool: True if battery warning is active
         """
-        if not self.initialized:
+        if not self.feedback.initialized:
             return False
 
         # Handle low battery warning
         if battery_level <= BATTERY_CRITICAL_LEVEL:
             # Critical battery - fast red flashing
             if time.time() % 0.6 < 0.3:  # Fast flashing
-                self.set_led_color(255, 0, 0)  # Bright red
+                self.feedback.set_led_color(255, 0, 0)  # Bright red
             else:
-                self.set_led_color(50, 0, 0)  # Dim red
+                self.feedback.set_led_color(50, 0, 0)  # Dim red
             return True
         elif battery_level <= BATTERY_WARNING_LEVEL:
             # Low battery - slow orange pulsing
             if time.time() % 2 < 1:  # Slow pulsing
-                self.set_led_color(255, 128, 0)  # Orange
+                self.feedback.set_led_color(255, 128, 0)  # Orange
             else:
-                self.set_led_color(50, 25, 0)  # Dim orange
+                self.feedback.set_led_color(50, 25, 0)  # Dim orange
             return True
 
         return False

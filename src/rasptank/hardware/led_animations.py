@@ -1,6 +1,5 @@
 """This module contains the LedAnimationThread class, which is responsible for controlling the LED animations on the robot."""
 
-import queue
 import threading
 import time
 
@@ -15,59 +14,66 @@ class AnimationType:
 
 
 class LedAnimationThread(threading.Thread):
-    def __init__(self, set_color_func, team_color):
-        super().__init__(daemon=True)
-        self.set_color = set_color_func
+    def __init__(self, color_setter, team_color):
+        super().__init__()
+        self.color_setter = color_setter
         self.team_color = team_color
-        self.animation_queue = queue.Queue()
-        self.active = True
-        self.current_animation = None
+        self.current_animation = AnimationType.TEAM_COLOR
+        self.animation_duration = 0
+        self.animation_end_time = time.time()
+        self.running = True
+        self.lock = threading.Lock()
 
     def run(self):
-        while self.active:
-            try:
-                animation, duration = self.animation_queue.get(timeout=0.1)
-                self.current_animation = animation
+        while self.running:
+            now = time.time()
+            with self.lock:
+                if now > self.animation_end_time:
+                    self.current_animation = AnimationType.TEAM_COLOR
 
-                if animation == AnimationType.HIT:
-                    end_time = time.time() + duration
-                    while time.time() < end_time:
-                        self.set_color((255, 165, 0))  # Orange
-                        time.sleep(0.2)
-                        self.set_color((0, 0, 0))  # Off
-                        time.sleep(0.2)
+                self.execute_current_animation()
 
-                elif animation == AnimationType.CAPTURING:
-                    while self.current_animation == AnimationType.CAPTURING:
-                        for brightness in range(0, 101, 5):
-                            intensity = int(255 * brightness / 100)
-                            self.set_color((0, 0, intensity))
-                            time.sleep(0.05)
-                        for brightness in range(100, -1, -5):
-                            intensity = int(255 * brightness / 100)
-                            self.set_color((0, 0, intensity))
-                            time.sleep(0.05)
+            if self.current_animation in [AnimationType.CAPTURING, AnimationType.FLAG_POSSESSED]:
+                time.sleep(0.01)  # Fast loop for continuous animations
+            else:
+                time.sleep(0.05)  # Slower loop for intermittent animations
 
-                elif animation == AnimationType.SCORED:
-                    end_time = time.time() + duration
-                    while time.time() < end_time:
-                        self.set_color((0, 255, 0))  # Green
-                        time.sleep(0.3)
-                        self.set_color((0, 0, 0))  # Off
-                        time.sleep(0.3)
+    def set_animation(self, animation_type, duration):
+        with self.lock:
+            self.current_animation = animation_type
+            self.animation_duration = duration
+            self.animation_end_time = time.time() + duration
 
-                elif animation == AnimationType.FLAG_POSSESSED:
-                    self.set_color((128, 0, 128))  # Purple
-                    time.sleep(duration)
+    def stop_animation(self):
+        with self.lock:
+            # Force current animation to expire immediately
+            self.animation_end_time = time.time() - 1  # Ensures immediate stop
 
-                self.set_color(self.team_color)
-                self.animation_queue.task_done()
-
-            except queue.Empty:
-                continue
+    def execute_current_animation(self):
+        # Implement your actual animation patterns here
+        if self.current_animation == AnimationType.CAPTURING:
+            for brightness in range(0, 101, 5):
+                intensity = int(255 * brightness / 100)
+                self.color_setter((0, 0, intensity))
+                time.sleep(0.05)
+            for brightness in range(100, -1, -5):
+                intensity = int(255 * brightness / 100)
+                self.color_setter((0, 0, intensity))
+                time.sleep(0.05)
+        elif self.current_animation == AnimationType.FLAG_POSSESSED:
+            self.color_setter((255, 0, 0))  # Purple
+        elif self.current_animation == AnimationType.HIT:
+            self.color_setter((255, 165, 0))  # Orange
+            time.sleep(0.2)
+            self.color_setter((0, 0, 0))  # Off
+            time.sleep(0.2)
+        elif self.current_animation == AnimationType.SCORED:
+            self.color_setter((0, 255, 0))  # Green
+            time.sleep(0.3)
+            self.color_setter((0, 0, 0))  # Off
+            time.sleep(0.3)
+        elif self.current_animation == AnimationType.TEAM_COLOR:
+            self.color_setter(self.team_color)
 
     def stop(self):
-        self.active = False
-
-    def set_animation(self, animation, duration=2):
-        self.animation_queue.put((animation, duration))
+        self.running = False
