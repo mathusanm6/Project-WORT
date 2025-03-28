@@ -128,16 +128,16 @@ class RasptankLedStrip:
         self.reset_to_team_color()
 
     def turn_off(self):
+        """Turn off all LEDs."""
         self.strip.begin()
-        self.animation_thread.set_animation(AnimationType.OFF, duration=0.1)
+        self.set_color(self.COLOR_OFF)
 
     def cleanup(self):
         """Clean up resources before exiting."""
 
-        self.turn_off()
-        time.sleep(0.1)
-
         self.animation_thread.stop()
         self.animation_thread.join(timeout=1)
+
+        self.turn_off()
 
         logging.info("LED strip cleanup complete")
