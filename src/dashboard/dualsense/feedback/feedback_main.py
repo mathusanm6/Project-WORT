@@ -148,7 +148,7 @@ class DualSenseFeedback:
             if duration_ms > 0:
                 # Start rumble continuously - we'll stop it after the duration
                 result = sdl2.SDL_GameControllerRumble(
-                    self.sdl_controller, low_freq, high_freq, 0  # Continuous
+                    self.sdl_controller, int(low_freq), int(high_freq), 0  # Continuous
                 )
 
                 # Schedule a timer to stop the rumble after the requested duration
@@ -164,7 +164,7 @@ class DualSenseFeedback:
             else:
                 # Continuous rumble
                 result = sdl2.SDL_GameControllerRumble(
-                    self.sdl_controller, low_freq, high_freq, 0  # Continuous
+                    self.sdl_controller, int(low_freq), int(high_freq), 0  # Continuous
                 )
 
             return result == 0

@@ -178,21 +178,21 @@ class DualsenseFeedbackCollection:
 
     def _hit_effect(self, r: int, g: int, b: int):
         """Run the hit effect in a background thread."""
-        # Flash LED red and vibrate
+        # Flash LED red and vibrate, then transition to green to indicate recovery
         start_time = time.time()
         elapsed_time = 0
 
-        # Flash for up to 1.5 seconds (reduced from 2s for quicker response)
+        # Flash and transition over 1.5 seconds
         while elapsed_time < 1.5 and self._running:
-            progress = elapsed_time / 1.5  # Progression from 0 to 1
+            progress = elapsed_time / 1.5  # Progress from 0 to 1
 
-            # Interpolate color from red to original
-            flash_r = int(255 * (1 - progress) + r * progress)
-            flash_g = int(0 * (1 - progress) + g * progress)
-            flash_b = int(0 * (1 - progress) + b * progress)
+            # Transition from red to green
+            flash_r = int(255 * (1 - progress))
+            flash_g = int(255 * progress)
+            flash_b = 0
 
             self.feedback.set_led_color(flash_r, flash_g, flash_b)
-            self.feedback.set_rumble(65535 * (1 - progress), 65535 * (1 - progress), 100)
+            self.feedback.set_rumble(int(65535 * (1 - progress)), int(65535 * (1 - progress)), 100)
             time.sleep(0.1)
 
             if not self._running:
