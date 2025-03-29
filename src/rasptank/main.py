@@ -49,7 +49,10 @@ running = True
 # Global variables for ongoing game
 team = None
 qr = None
-flag = None
+flag = False
+hit = 0
+capturing = False
+tank_id = None
 
 
 def signal_handler(sig, frame):
@@ -133,6 +136,25 @@ def handle_shoot_command(client, topic, payload, qos, retain):
         logger.error(f"Error handling shoot command: {e}")
 
 
+def handle_scan_command(client, topic, payload, qos, retain):
+    """Handle shoot commands received via MQTT.
+
+    Args:
+        client (MQTTClient): MQTT client instance
+        topic (str): Topic the message was received on
+        payload (str): Message payload
+        qos (int): QoS level
+        retain (bool): Whether the message was retained
+    """
+    global qr, tank_id
+    try:
+        logger.info(f"Scan qr code command received: {payload}")
+        client.publish(QR_TOPIC(tank_id), qr, qos=1)
+        client.publish(STATUS_TOPIC, "Scan qr code started...", qos=0)
+    except Exception as e:
+        logger.error(f"Error handling shoot command: {e}")
+
+
 def handle_camera_command(client, topic, payload, qos, retain):
     """Handle camera control commands received via MQTT.
 
@@ -175,76 +197,59 @@ def handle_init(client, topic, payload, qos, retain):
         msgs = payload.split(" ")
         if msgs[0] == "TEAM":
             team = msgs[1]
+            client.publish(STATUS_TOPIC, f"We are in team {team}", qos=0)
         elif msgs[0] == "QR_CODE":
             qr = msgs[1]
+            client.publish(STATUS_TOPIC, f"QR code for scan is : {qr}", qos=0)
         elif msgs[0] == "END":
-            return
+            client.publish(
+                STATUS_TOPIC, f"Initialisation from server successful, let's beat some ass", qos=0
+            )
         else:
-            print(f"Not recognized msg from {topic} : {msgs}")
+            print(f"Unknown message from server's on topic {topic}, msg= {msgs}")
 
     except Exception as e:
         logger.error(f"Error handling init command: {e}")
-
-
-def handle_flag(client, topic, payload, qos, retain):
-    global flag
-    try:
-        # Handle server msg
-        msg = payload
-        if msg == "FLAG_CATCHED":
-            flag = True
-        elif msg == "FLAG_LOST":
-            flag = False
-        elif msg == "ABORT_CATCHING_SHOT":
-            print("TODO abort cacthing flag")
-        elif msg == "WIN":
-            print(msg)
-        else:
-            print(
-                msg
-            )  # Behaviour to define depending on msg received : start_catching, already_got, not_onbase, abort_catching_exit
-    except Exception as e:
-        logger.error(f"Error handling flag command: {e}")
 
 
 def handle_shotin(client, topic, payload, qos, retain):
     try:
         # Handle server msg
         msg = payload
-        if msg == "ABORT_CATCHING_SHOT":
-            print("TODO abort cacthing flag")
+        if msg == "SHOT":
+            print("TODO freeze the tank")
         else:
-            print(msg)  # Behaviour to define depending on msg received : shot
+            print(f"Unknown message from server's on topic {topic}, msg= {msg}")
     except Exception as e:
         logger.error(f"Error handling shotin command: {e}")
 
 
 def handle_shotout(client, topic, payload, qos, retain):
+    global hit
     try:
         # Handle server msg
         msg = payload
         if msg == "FRIENDLY_FIRE":
             print("TODO stop shooting on friend bro you're stupid")
+        elif msg == "SHOT":
+            print("TODO headshot")
+            hit = hit + 1
         else:
-            print(msg)  # Behaviour to define depending on msg received : shot
+            print(f"Unknown message from server's on topic {topic}, msg= {msg}")
     except Exception as e:
         logger.error(f"Error handling shotin command: {e}")
 
 
 def handle_qr(client, topic, payload, qos, retain):
-    global flag_count, team_color
+    global flag, team, rasptank_hardware
     try:
         msg = payload
-        if msg == "SCAN_SUCCESSFUL":
-            print("QR code validé.")
-        elif msg == "SCAN_FAILED":
-            print("QR code invalide.")
-        elif msg == "FLAG_DEPOSITED":
-            print("Drapeau déposé.")
-        elif msg == "NO_FLAG":
-            print("Aucun drapeau à déposer.")
+        if msg in ["SCAN_SUCCESSFUL", "SCAN_FAILED", "FLAG_DEPOSITED", "NO_FLAG"]:
+            client.publish(STATUS_TOPIC, msg, qos=0)
+            if msg == "FLAG_DEPOSITED":
+                rasptank_hardware.led_strip.scored_animation()
         else:
-            print(f"Message inconnu reçu : {msg}")
+            print(f"Unknown message from server's on topic {topic}, msg= {msg}")
     except Exception as e:
         logger.error(f"Erreur lors du traitement du scan QR : {e}")
 
@@ -349,7 +354,7 @@ def main():
         # Server topics communication
         # Set up handler for init server msg
         tank_id = str(uuid.getnode())
-        if len(tank_id > 15):
+        if len(tank_id) > 15:
             tank_id = tank_id[0:15]
         mqtt_client.subscribe(topic=INIT_TOPIC(tank_id), qos=1, callback=handle_init)
         mqtt_client.publish(
@@ -373,7 +378,7 @@ def main():
         # Main loop - keep the program running
         while running:
             time.sleep(0.1)
-            print(team, qr)
+            # print(team, qr)
 
     except Exception as e:
         logger.error(f"Error in main loop: {e}")

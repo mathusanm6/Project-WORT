@@ -13,6 +13,8 @@ import time
 
 import pygame
 
+from src.common.constants.actions import SCAN_COMMAND_TOPIC, SHOOT_COMMAND_TOPIC, ActionType
+
 # Import from src.common
 from src.common.constants.actions import SHOOT_COMMAND_TOPIC, ActionType
 from src.common.constants.game import GAME_EVENT_TOPIC, STATUS_TOPIC
@@ -139,6 +141,8 @@ def send_action_command(action_type: ActionType):
         # Determine the appropriate topic based on the action type
         if action_type == ActionType.SHOOT:
             topic = SHOOT_COMMAND_TOPIC
+        elif action_type == ActionType.SCAN:
+            topic = SCAN_COMMAND_TOPIC
         else:
             logger.warnw("Unknown action command", "action", action_type)
             return

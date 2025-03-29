@@ -55,8 +55,8 @@ class ButtonType(Enum):
 
     CROSS = "cross"  # PlayStation X button
     CIRCLE = "circle"
-    SQUARE = "square"
-    TRIANGLE = "triangle"
+    SQUARE = "square"  # Shoot command
+    TRIANGLE = "triangle"  # Scan command
     L1 = "L1"
     R1 = "R1"
     L2 = "L2"  # Digital press of L2
