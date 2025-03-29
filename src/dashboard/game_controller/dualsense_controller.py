@@ -50,9 +50,11 @@ class DualSenseController(BaseController):
                 Function signature: callback(direction, pressed)
             enable_feedback: Whether to enable LED and rumble feedback
         """
-        super().__init__()
-
         self.logger = dualsense_logger
+        self.logger.infow("Initializing DualSense controller")
+
+        base_controller_logger = dualsense_logger.with_component("base_controller")
+        super().__init__(base_controller_logger)
 
         # Initialize callbacks
         self.on_button_event = on_button_event
