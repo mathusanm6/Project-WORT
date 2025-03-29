@@ -1,5 +1,5 @@
 """
-RaspTank Adapter for Controller Inputs
+RaspTank Adapter for Controller Inputs - Updated for new feedback collection API
 
 This adapter converts raw controller inputs into commands
 compatible with the RaspTank hardware implementation.
@@ -115,7 +115,8 @@ class ControllerAdapter:
 
         # Set initial LED color based on speed mode if feedback available
         if self.has_feedback:
-            self.controller.set_led_color(*self.speed_modes[self.current_speed_mode_idx].color)
+            r, g, b = self.speed_modes[self.current_speed_mode_idx].color
+            self.controller.feedback_collection.set_led_color(r, g, b)
 
         self.logger.infow("RaspTank Controller Adapter initialized with DualSense controller")
         self.logger.infow(
@@ -159,9 +160,8 @@ class ControllerAdapter:
 
                 # Update LED color based on new speed mode and rumble
                 if self.has_feedback:
-                    self.controller.feedback_collection.on_speed_change(
-                        *self.speed_modes[self.current_speed_mode_idx].color
-                    )
+                    r, g, b = self.speed_modes[self.current_speed_mode_idx].color
+                    self.controller.feedback_collection.on_speed_change(r, g, b)
 
                 # Update movement with new speed if we're currently moving
                 if self.last_movement and not (
@@ -175,9 +175,8 @@ class ControllerAdapter:
             else:
                 self.logger.debugw("Already at the lowest speed mode")
                 if self.has_feedback:
-                    self.controller.feedback_collection.on_speed_out_of_bound(
-                        *self.speed_modes[self.current_speed_mode_idx].color
-                    )
+                    r, g, b = self.speed_modes[self.current_speed_mode_idx].color
+                    self.controller.feedback_collection.on_speed_out_of_bound(r, g, b)
 
             self.logger.debugw("L1 pressed", "speed_mode_after", self.current_speed_mode_idx)
 
@@ -201,9 +200,8 @@ class ControllerAdapter:
 
                 # Update LED color based on new speed mode and rumble
                 if self.has_feedback:
-                    self.controller.feedback_collection.on_speed_change(
-                        *self.speed_modes[self.current_speed_mode_idx].color
-                    )
+                    r, g, b = self.speed_modes[self.current_speed_mode_idx].color
+                    self.controller.feedback_collection.on_speed_change(r, g, b)
 
                 # Update movement with new speed if we're currently moving
                 if self.last_movement and not (
@@ -217,9 +215,8 @@ class ControllerAdapter:
             else:
                 self.logger.debugw("Already at the highest speed mode")
                 if self.has_feedback:
-                    self.controller.feedback_collection.on_speed_out_of_bound(
-                        *self.speed_modes[self.current_speed_mode_idx].color
-                    )
+                    r, g, b = self.speed_modes[self.current_speed_mode_idx].color
+                    self.controller.feedback_collection.on_speed_out_of_bound(r, g, b)
 
             self.logger.debugw("R1 pressed", "speed_mode_after", self.current_speed_mode_idx)
 
@@ -229,18 +226,16 @@ class ControllerAdapter:
                 self.logger.debugw("Shoot command sent")
                 self.on_action_command(ActionType.SHOOT)
                 if self.has_feedback:
-                    self.controller.feedback_collection.on_shoot(
-                        *self.speed_modes[self.current_speed_mode_idx].color
-                    )
+                    # Updated: no longer pass LED color, feedback collection tracks it internally
+                    self.controller.feedback_collection.on_shoot()
 
         # Toggle pivot mode using the TRIANGLE button
         elif button_name == ButtonType.TRIANGLE.value and pressed:
             self.pivot_mode = not self.pivot_mode
             self.logger.debugw("Pivot mode toggled", "pivot_mode", self.pivot_mode)
             if self.has_feedback:
-                self.controller.feedback_collection.on_pivot_mode(
-                    *self.speed_modes[self.current_speed_mode_idx].color
-                )
+                # Updated: no longer pass LED color, feedback collection tracks it internally
+                self.controller.feedback_collection.on_pivot_mode()
 
     def _update_active_dpad_movements(self):
         """Update any active D-pad movements with the current pivot mode and speed."""
@@ -613,6 +608,10 @@ class ControllerAdapter:
             SpeedMode.STOP,
             CurvedTurnRate.NONE,
         )
+
+        # Make sure rumble is stopped
+        if self.has_feedback:
+            self.controller.feedback_collection.stop_rumble()
 
         self.logger.infow("Movement stopped")
 
