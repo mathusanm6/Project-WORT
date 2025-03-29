@@ -322,13 +322,14 @@ def main():
 
         # Initialize Rasptank Hardware
         hw_logger = logger.with_component("hardware")
-        rasptank_hardware = RasptankHardware()
+        rasptank_hardware = RasptankHardware(hw_logger)
+
         time.sleep(0.2)  # hardware initialization pause
 
         # Initialize MQTT Movement Controller
         movement_logger = logger.with_component("movement")
         movement_controller = MQTTMovementController(
-            logger=movement_logger,
+            movement_logger=movement_logger,
             hardware=rasptank_hardware,
             mqtt_client=mqtt_client,
             command_topic=MOVEMENT_COMMAND_TOPIC,
@@ -337,16 +338,12 @@ def main():
 
         # Initialize Action Controller
         action_logger = logger.with_component("action")
-        action_logger.infow("Initializing Action Controller")
-        action_controller = ActionController(rasptank_hardware)
+        action_controller = ActionController(action_logger, rasptank_hardware)
 
         # IR Receiver setup
-        ir_logger = logger.with_component("ir_receiver")
-        ir_logger.infow("Setting up IR receiver")
         if not rasptank_hardware.ir_receiver.setup_ir_receiver(
             client=mqtt_client, led_command_queue=rasptank_hardware.get_led_command_queue()
         ):
-            ir_logger.fatalw("IR receiver setup failed")
             return 1
 
         time.sleep(0.2)
