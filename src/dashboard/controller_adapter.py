@@ -236,6 +236,17 @@ class ControllerAdapter:
                 # Updated: no longer pass LED color, feedback collection tracks it internally
                 self.controller.feedback_collection.on_pivot_mode()
 
+        # Scan qr code using the TRIANGLE button
+        if button_name == ButtonType.CIRCLE.value and pressed:
+            if self.on_action_command:
+                logger.info("Scan command sent")
+                self.on_action_command(ActionType.SCAN)
+
+                if self.has_feedback:
+                    self.controller.feedback_collection.on_shoot(
+                        *self.speed_modes[self.current_speed_mode_idx].color
+                    )
+
     def _update_active_dpad_movements(self):
         """Update any active D-pad movements with the current pivot mode and speed."""
         dpad_state = self.controller.get_status()["dpad"]
