@@ -25,8 +25,8 @@ from src.common.enum.movement import (
 from src.common.logging.logger_api import Logger
 
 # Import from the new modular controller structure
-from src.dashboard.game_controller.dualsense_controller import DualSenseController
-from src.dashboard.game_controller.events import (
+from src.dashboard.dualsense.controller import DualSenseController
+from src.dashboard.dualsense.controller_events import (
     ButtonType,
     DPadDirection,
     JoystickType,

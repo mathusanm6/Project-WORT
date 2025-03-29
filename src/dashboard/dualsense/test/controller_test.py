@@ -21,7 +21,7 @@ from typing import List
 import pygame
 
 # Import from src.dashboard
-from src.dashboard.game_controller.dualsense_controller import DualSenseController
+from src.dashboard.dualsense.controller import DualSenseController
 
 # Configure logging
 logging.basicConfig(

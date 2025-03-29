@@ -11,16 +11,16 @@ from src.common.constants.controller import JOYSTICK_DEAD_ZONE
 from src.common.logging.logger_api import Logger
 
 # Import from src.dashboard
-from src.dashboard.game_controller.controller_base import BaseController
-from src.dashboard.game_controller.dualsense_feedback import DualSenseFeedback
-from src.dashboard.game_controller.dualsense_feedback_collection import DualsenseFeedbackCollection
-from src.dashboard.game_controller.dualsense_mapping import (
+from src.dashboard.dualsense.base_controller import BaseController
+from src.dashboard.dualsense.controller_mapping import (
     AXIS_MAPPING,
     DPAD_BUTTON_MAPPING,
     DPAD_TYPE,
     get_axis_name,
     get_button_name,
 )
+from src.dashboard.dualsense.feedback.collection import DualsenseFeedbackCollection
+from src.dashboard.dualsense.feedback.feedback_main import DualSenseFeedback
 
 
 class DualSenseController(BaseController):
