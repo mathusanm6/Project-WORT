@@ -74,6 +74,9 @@ class RasptankMotors:
             self.pwm_A = GPIO.PWM(MotorPins.MOTOR_A_EN.value, 1000)
             self.pwm_B = GPIO.PWM(MotorPins.MOTOR_B_EN.value, 1000)
 
+            if not self.pwm_A or not self.pwm_B:
+                raise RuntimeError("PWM failed to initialize")
+
             # Start PWM with 0 duty cycle (motors off)
             self.pwm_A.start(0)
             self.pwm_B.start(0)
