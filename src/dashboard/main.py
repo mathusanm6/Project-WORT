@@ -518,6 +518,9 @@ def main():
 
     atexit.register(cleanup_resources)
 
+    dualsense_controller_logger = controller_logger.with_component("dualsense")
+    controller_adapter_logger = controller_logger.with_component("controller_adapter")
+
     try:
         # Initialize pygame early to ensure proper setup on all platforms
         pygame.init()
@@ -530,7 +533,6 @@ def main():
             enable_feedback = not args.no_feedback
 
             # Initialize without callbacks - the movement adapter will handle these
-            dualsense_controller_logger = controller_logger.with_component("dualsense")
             dualsense_controller = DualSenseController(dualsense_controller_logger, enable_feedback)
 
             if not dualsense_controller.setup():
@@ -547,7 +549,9 @@ def main():
                 controller_logger.infow(
                     "Initializing controller movement adapter with new control scheme"
                 )
+
                 movement_controller = ControllerAdapter(
+                    controller_adapter_logger=controller_adapter_logger,
                     controller=dualsense_controller,
                     on_movement_command=send_movement_command,
                     on_action_command=send_action_command,
@@ -632,6 +636,7 @@ def main():
                             "Initializing controller movement adapter after reconnection"
                         )
                         movement_controller = ControllerAdapter(
+                            controller_adapter_logger=controller_adapter_logger,
                             controller=dualsense_controller,
                             on_movement_command=send_movement_command,
                             on_action_command=send_action_command,
