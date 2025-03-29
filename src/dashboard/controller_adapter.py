@@ -142,14 +142,14 @@ class ControllerAdapter:
         # Handle speed control with L1 button (decrease speed)
         if button_name == ButtonType.L1.value and pressed:
             # Log current speed mode for debugging
-            self.logger.infow(
+            self.logger.debugw(
                 "L1 pressed", "current_speed_mode_before", self.current_speed_mode_idx
             )
 
             # Decrease speed mode (without wrap-around)
             if self.current_speed_mode_idx > 0:
                 self.current_speed_mode_idx -= 1
-                self.logger.infow(
+                self.logger.debugw(
                     "Speed decreased",
                     "mode",
                     self.current_speed_mode_idx,
@@ -173,25 +173,25 @@ class ControllerAdapter:
                     # Also update any active D-pad movements with the new speed
                     self._update_active_dpad_movements()
             else:
-                self.logger.infow("Already at the lowest speed mode")
+                self.logger.debugw("Already at the lowest speed mode")
                 if self.has_feedback:
                     self.controller.feedback_collection.on_speed_out_of_bound(
                         *self.speed_modes[self.current_speed_mode_idx].color
                     )
 
-            self.logger.infow("L1 pressed", "speed_mode_after", self.current_speed_mode_idx)
+            self.logger.debugw("L1 pressed", "speed_mode_after", self.current_speed_mode_idx)
 
         # Handle speed control with R1 button (increase speed)
         elif button_name == ButtonType.R1.value and pressed:
             # Log current speed mode for debugging
-            self.logger.infow(
+            self.logger.debugw(
                 "R1 pressed", "current_speed_mode_before", self.current_speed_mode_idx
             )
 
             # Increase speed mode (without wrap-around)
             if self.current_speed_mode_idx < len(self.speed_values) - 1:
                 self.current_speed_mode_idx += 1
-                self.logger.infow(
+                self.logger.debugw(
                     "Speed increased",
                     "mode",
                     self.current_speed_mode_idx,
@@ -215,18 +215,18 @@ class ControllerAdapter:
                     # Also update any active D-pad movements with the new speed
                     self._update_active_dpad_movements()
             else:
-                self.logger.infow("Already at the highest speed mode")
+                self.logger.debugw("Already at the highest speed mode")
                 if self.has_feedback:
                     self.controller.feedback_collection.on_speed_out_of_bound(
                         *self.speed_modes[self.current_speed_mode_idx].color
                     )
 
-            self.logger.infow("R1 pressed", "speed_mode_after", self.current_speed_mode_idx)
+            self.logger.debugw("R1 pressed", "speed_mode_after", self.current_speed_mode_idx)
 
         # Shoot using the SQUARE button
         elif button_name == ButtonType.SQUARE.value and pressed:
             if self.on_action_command:
-                self.logger.infow("Shoot command sent")
+                self.logger.debugw("Shoot command sent")
                 self.on_action_command(ActionType.SHOOT)
                 if self.has_feedback:
                     self.controller.feedback_collection.on_shoot(
@@ -236,7 +236,7 @@ class ControllerAdapter:
         # Toggle pivot mode using the TRIANGLE button
         elif button_name == ButtonType.TRIANGLE.value and pressed:
             self.pivot_mode = not self.pivot_mode
-            self.logger.infow("Pivot mode toggled", "pivot_mode", self.pivot_mode)
+            self.logger.debugw("Pivot mode toggled", "pivot_mode", self.pivot_mode)
             if self.has_feedback:
                 self.controller.feedback_collection.on_pivot_mode(
                     *self.speed_modes[self.current_speed_mode_idx].color
@@ -317,13 +317,13 @@ class ControllerAdapter:
         if trigger_name == TriggerType.R2.value:
             # R2 for forward movement
             self.r2_trigger_value = value if value > TRIGGER_THRESHOLD else 0.0
-            self.logger.infow(
+            self.logger.debugw(
                 "R2 trigger pressed", "value", value, "current_value", self.r2_trigger_value
             )
         elif trigger_name == TriggerType.L2.value:
             # L2 for backward movement
             self.l2_trigger_value = value if value > TRIGGER_THRESHOLD else 0.0
-            self.logger.infow(
+            self.logger.debugw(
                 "L2 trigger pressed", "value", value, "current_value", self.l2_trigger_value
             )
 
