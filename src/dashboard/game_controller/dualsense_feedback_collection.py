@@ -303,7 +303,7 @@ class DualsenseFeedbackCollection:
         # Restore LED to previous color immediately
         self.feedback.set_led_color(prev_r, prev_g, prev_b)
 
-    def on_flag_capture_started(self, prev_r: int, prev_g: int, prev_b: int) -> None:
+    def on_capture_flag(self, prev_r: int, prev_g: int, prev_b: int) -> None:
         """Provide feedback when flag capture starts."""
         self.is_flag_capturing = True
 
@@ -353,6 +353,19 @@ class DualsenseFeedbackCollection:
             self.feedback.set_rumble(0, 0, 200)
             time.sleep(0.2)
 
+        # Restore LED to previous color immediately
+        self.feedback.set_led_color(prev_r, prev_g, prev_b)
+
+    def on_pivot_mode(self, prev_r: int, prev_g: int, prev_b: int) -> None:
+        """Provide feedback when pivot mode is activated."""
+        # Flash LED yellow
+        for _ in range(5):
+            self.feedback.set_led_color(255, 255, 0)
+            self.feedback.set_rumble(65535, 65535, 200)
+            time.sleep(0.1)
+            self.feedback.set_led_color(0, 0, 0)
+            self.feedback.set_rumble(0, 0, 200)
+            time.sleep(0.1)
         # Restore LED to previous color immediately
         self.feedback.set_led_color(prev_r, prev_g, prev_b)
 

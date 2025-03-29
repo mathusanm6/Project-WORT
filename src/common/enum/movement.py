@@ -99,8 +99,8 @@ class CurvedTurnRate(Enum):
     """
 
     NONE = 0.0
-    LEVEL1 = 0.3
-    LEVEL2 = 0.4
+    LEVEL1 = 0.4
+    LEVEL2 = 0.6
 
     @staticmethod
     def get_curved_turn_rates() -> List["CurvedTurnRate"]:
