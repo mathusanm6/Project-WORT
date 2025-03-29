@@ -8,10 +8,9 @@ import os
 import subprocess
 import sys
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Optional, Tuple
 
 from src.common.logging.decorators import log_function_call
-from src.common.logging.logger_api import LogLevel
 
 # Import from logging system
 from src.common.logging.logger_factory import LoggerFactory
@@ -114,7 +113,7 @@ def install_mosquitto() -> bool:
             exc_info=True,
         )
         return False
-    except Exception as e:
+    except (PermissionError, OSError) as e:
         logger.errorw("Error installing Mosquitto", "error", str(e), exc_info=True)
         return False
 
@@ -130,11 +129,11 @@ def create_config_file(config_path: str = "/tmp/rasptank-mosquitto.conf") -> str
     """
     try:
         logger.debugw("Creating Mosquitto configuration file", "path", config_path)
-        with open(config_path, "w") as f:
+        with open(config_path, "w", encoding="utf-8") as f:
             f.write(DEFAULT_BROKER_CONFIG)
         logger.infow("Created Mosquitto configuration file", "path", config_path)
         return config_path
-    except Exception as e:
+    except (IOError, OSError, PermissionError) as e:
         logger.errorw(
             "Error creating Mosquitto configuration file",
             "path",
@@ -158,6 +157,8 @@ def start_broker(config_path: str) -> Optional[subprocess.Popen]:
     """
     try:
         logger.infow("Starting Mosquitto broker", "config", config_path)
+
+        # pylint: disable=consider-using-with  # Resource management handled by caller
         process = subprocess.Popen(
             ["mosquitto", "-c", config_path],
             stdout=subprocess.PIPE,
@@ -172,17 +173,18 @@ def start_broker(config_path: str) -> Optional[subprocess.Popen]:
         if process.poll() is None:
             logger.infow("Mosquitto broker started successfully", "pid", process.pid)
             return process
-        else:
-            stdout, stderr = process.communicate()
-            logger.errorw(
-                "Mosquitto broker failed to start",
-                "return_code",
-                process.returncode,
-                "stderr",
-                stderr,
-            )
-            return None
-    except Exception as e:
+
+        # The process didn't start successfully
+        _, stderr = process.communicate()
+        logger.errorw(
+            "Mosquitto broker failed to start",
+            "return_code",
+            process.returncode,
+            "stderr",
+            stderr,
+        )
+        return None
+    except (FileNotFoundError, PermissionError, subprocess.SubprocessError, OSError) as e:
         logger.errorw("Error starting Mosquitto broker", "error", str(e), exc_info=True)
         return None
 
@@ -214,7 +216,7 @@ def check_broker_status(host: str = "localhost", port: int = 1883) -> bool:
         is_running = result.returncode == 0
         logger.debugw("MQTT broker status check", "running", is_running)
         return is_running
-    except Exception as e:
+    except (FileNotFoundError, subprocess.SubprocessError, ConnectionError, OSError) as e:
         logger.errorw(
             "Error checking broker status",
             "host",
@@ -262,9 +264,9 @@ def setup_broker() -> Tuple[bool, Optional[subprocess.Popen]]:
     process = start_broker(config_path)
     if process:
         return True, process
-    else:
-        logger.errorw("Failed to start MQTT broker")
-        return False, None
+
+    logger.errorw("Failed to start MQTT broker")
+    return False, None
 
 
 def main():
