@@ -209,8 +209,8 @@ class DualsenseFeedbackCollection:
 
     def on_capture_flag(self) -> None:
         """Feedback when flag capture starts."""
-        # Store current LED color
-        r, g, b = self.current_led_color
+        # Store purple color for flag capture (This avoids flickering)
+        r, g, b = (255, 0, 255)  # Default color for flag capture
 
         # Set capturing flag immediately for other methods to check
         self.is_flag_capturing = True
