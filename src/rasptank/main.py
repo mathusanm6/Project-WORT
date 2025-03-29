@@ -5,7 +5,7 @@ This script initializes all the required components for the Rasptank
 to be controlled via MQTT from a PC with a DualSense controller.
 """
 import argparse
-import logging
+import os
 import signal
 import sys
 import threading
@@ -16,22 +16,18 @@ from queue import Empty
 from src.common.constants.actions import SHOOT_COMMAND_TOPIC
 from src.common.constants.game import FLAG_CAPTURE_DURATION, GAME_EVENT_TOPIC, STATUS_TOPIC
 from src.common.constants.movement import MOVEMENT_COMMAND_TOPIC, MOVEMENT_STATE_TOPIC
+from src.common.logging.decorators import log_function_call
+from src.common.logging.logger_api import LogLevel
+
+# Import from logging system
+from src.common.logging.logger_factory import LoggerFactory
 from src.common.mqtt.client import MQTTClient
-from src.rasptank.action import ActionController
 
 # Import from src.rasptank
+from src.rasptank.action import ActionController
 from src.rasptank.hardware.led_strip import LedStripState
 from src.rasptank.hardware.main import RasptankHardware
 from src.rasptank.movement.controller.mqtt import MQTTMovementController
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger("RasptankMain")
-
-# MQTT Topics
-CAMERA_COMMAND_TOPIC = "rasptank/camera/command"
 
 # Global variables for resources that need cleanup
 rasptank_hardware = None
@@ -39,15 +35,41 @@ mqtt_client = None
 movement_controller = None
 action_controller = None
 running = True
+logger = None
+
+
+def create_logger(log_level_str):
+    """Create and configure the main logger."""
+    global logger
+
+    # Convert string log level to proper LogLevel value
+    log_level = LogLevel.INFO
+    if log_level_str.upper() == "DEBUG":
+        log_level = LogLevel.DEBUG
+    elif log_level_str.upper() == "WARNING":
+        log_level = LogLevel.WARNING
+    elif log_level_str.upper() == "ERROR":
+        log_level = LogLevel.ERROR
+
+    # Create the main logger
+    logger = LoggerFactory.create_logger(
+        logger_type=os.environ.get("RASPTANK_LOGGER_TYPE", "console"),
+        name="RasptankMain",
+        level=log_level,
+        use_colors=True,
+    )
+
+    return logger
 
 
 def signal_handler(sig, frame):
     """Handle termination signals gracefully."""
     global running
-    logging.info(f"Signal {sig} received. Stopping gracefully...")
+    logger.infow("Signal received. Stopping gracefully...", "signal", sig)
     running = False
 
 
+@log_function_call()
 def cleanup():
     """Clean up all resources."""
     global mqtt_client, movement_controller, action_controller, rasptank_hardware
@@ -55,78 +77,58 @@ def cleanup():
     # Clean up movement controller
     if movement_controller:
         try:
-            logger.info("Cleaning up movement controller")
+            logger.infow("Cleaning up movement controller")
             movement_controller.stop()
             movement_controller.cleanup()
         except Exception as e:
-            logger.error(f"Error cleaning up movement controller: {e}")
+            logger.errorw("Movement controller cleanup failed", "error", str(e), exc_info=True)
 
     # Clean up Rasptank hardware (including IR receiver polling)
     if rasptank_hardware:
         try:
-            logger.info("Cleaning up Rasptank hardware")
+            logger.infow("Cleaning up Rasptank hardware")
             rasptank_hardware.cleanup()
         except Exception as e:
-            logger.error(f"Error cleaning up Rasptank hardware: {e}")
+            logger.errorw("Rasptank hardware cleanup failed", "error", str(e), exc_info=True)
 
     # Disconnect MQTT client
     if mqtt_client:
         try:
-            logger.info("Disconnecting MQTT client")
+            logger.infow("Disconnecting MQTT client")
             mqtt_client.disconnect()
         except Exception as e:
-            logger.error(f"Error disconnecting MQTT client: {e}")
+            logger.errorw("MQTT client disconnect failed", "error", str(e), exc_info=True)
 
 
+@log_function_call()
 def handle_shoot_command(client, topic, payload, qos, retain):
-    """Handle shoot commands received via MQTT.
-
-    Args:
-        client (MQTTClient): MQTT client instance
-        topic (str): Topic the message was received on
-        payload (str): Message payload
-        qos (int): QoS level
-        retain (bool): Whether the message was retained
-    """
+    """Handle shoot commands received via MQTT."""
     try:
-        logger.info(f"Shoot command received: {payload}")
-
-        # Set LED to indicate shot fired
-        try:
-            pass
-        except Exception as led_error:
-            logger.error(f"Error setting LED: {led_error}")
+        logger.debugw("Shoot command received", "payload", payload)
 
         # Use IRBlast to send the IR signal
         if not action_controller:
-            logger.error("Action controller not initialized")
+            logger.errorw("Action controller not initialized")
             return
 
         success = action_controller.shoot(verbose=False)
 
         if success:
-            logger.info("IR blast successfully sent")
+            logger.debugw("IR blast successfully sent")
             # Publish confirmation to allow controller feedback
             client.publish(STATUS_TOPIC, "shot_fired", qos=0)
         else:
-            logger.error("Failed to send IR blast")
+            logger.errorw("Failed to send IR blast")
 
     except Exception as e:
-        logger.error(f"Error handling shoot command: {e}")
+        logger.errorw("Error handling shoot command", "error", str(e), exc_info=True)
 
 
+@log_function_call()
 def handle_camera_command(client, topic, payload, qos, retain):
-    """Handle camera control commands received via MQTT.
-
-    Args:
-        client (MQTTClient): MQTT client instance
-        topic (str): Topic the message was received on
-        payload (str): Message payload (format: "pan;tilt")
-        qos (int): QoS level
-        retain (bool): Whether the message was retained
-    """
+    """Handle camera control commands received via MQTT."""
     try:
-        logger.info(f"Camera command received: {payload}")
+        logger.debugw("Camera command received", "payload", payload)
 
         # Parse pan and tilt values
         parts = payload.split(";")
@@ -136,18 +138,17 @@ def handle_camera_command(client, topic, payload, qos, retain):
                 tilt = float(parts[1])
 
                 # TODO: Implement actual camera servo control
-                # This could involve driving servo motors via GPIO/PWM
-                logger.info(f"Moving camera to pan={pan}, tilt={tilt}")
+                logger.debugw("Moving camera", "pan", pan, "tilt", tilt)
 
                 # Publish confirmation
                 client.publish(STATUS_TOPIC, f"camera_moved;{pan};{tilt}", qos=0)
             except ValueError:
-                logger.warning(f"Invalid camera command format: {payload}")
+                logger.warnw("Invalid camera command format", "payload", payload)
         else:
-            logger.warning(f"Invalid camera command format: {payload}")
+            logger.warnw("Invalid camera command format", "payload", payload)
 
     except Exception as e:
-        logger.error(f"Error handling camera command: {e}")
+        logger.errorw("Error handling camera command", "error", str(e), exc_info=True)
 
 
 def handle_flag_capture_logic() -> bool:
@@ -169,7 +170,7 @@ def handle_flag_capture_logic() -> bool:
         if not handle_flag_capture_logic.was_on_zone_last_frame:
             # Just entered the zone
             rasptank_hardware.capture_start_time = time.time()
-            logging.info("Starting capturing animation")
+            logger.infow("Starting flag capture sequence")
             rasptank_hardware.led_strip.capturing_animation()
 
             if mqtt_client:
@@ -180,13 +181,13 @@ def handle_flag_capture_logic() -> bool:
                         qos=1,
                     )
                 except Exception as e:
-                    logging.error(f"Failed to publish flag capturing started event: {e}")
+                    logger.errorw("Failed to publish flag capturing started event", "error", str(e))
         else:
             # Still on zone, check duration
             if rasptank_hardware.capture_start_time is not None:
                 capture_duration = time.time() - rasptank_hardware.capture_start_time
                 if capture_duration >= FLAG_CAPTURE_DURATION:
-                    logging.info("Flag captured successfully")
+                    logger.infow("Flag captured successfully")
                     rasptank_hardware.led_strip.stop_animations()
                     rasptank_hardware.led_strip.flag_possessed()
 
@@ -200,7 +201,7 @@ def handle_flag_capture_logic() -> bool:
                                 qos=1,
                             )
                         except Exception as e:
-                            logging.error(f"Failed to publish flag captured event: {e}")
+                            logger.errorw("Failed to publish flag captured event", "error", str(e))
                     rasptank_hardware.capture_start_time = None
     else:
         if (
@@ -210,7 +211,11 @@ def handle_flag_capture_logic() -> bool:
             # Just exited the zone before completing capture
             capture_duration = time.time() - rasptank_hardware.capture_start_time
             if capture_duration < FLAG_CAPTURE_DURATION:
-                logging.info("Flag capture failed due to insufficient duration")
+                logger.infow(
+                    "Flag capture failed due to insufficient duration",
+                    "duration",
+                    f"{capture_duration:.2f}s",
+                )
                 rasptank_hardware.led_strip.stop_animations()
 
                 if mqtt_client:
@@ -221,7 +226,9 @@ def handle_flag_capture_logic() -> bool:
                             qos=1,
                         )
                     except Exception as e:
-                        logging.error(f"Failed to publish flag capture failed event: {e}")
+                        logger.errorw(
+                            "Failed to publish flag capture failed event", "error", str(e)
+                        )
             rasptank_hardware.capture_start_time = None
 
     # Update tracking for next loop
@@ -232,7 +239,7 @@ def handle_flag_capture_logic() -> bool:
 
 def publish_status_update():
     """Publish periodic status updates."""
-    global mqtt_client, running
+    global mqtt_client, running, logger
 
     if not mqtt_client or not running:
         return
@@ -248,13 +255,16 @@ def publish_status_update():
         # Publish status information
         status_message = f"status;{status['battery']};{status['timestamp']}"
         mqtt_client.publish(STATUS_TOPIC, status_message, qos=0)
+        logger.debugw(
+            "Status published", "battery", status["battery"], "timestamp", status["timestamp"]
+        )
 
         # Schedule next update if still running
         if running:
             threading.Timer(10.0, publish_status_update).start()
 
     except Exception as e:
-        logger.error(f"Error publishing status update: {e}")
+        logger.errorw("Error publishing status update", "error", str(e))
 
 
 def parse_arguments():
@@ -265,24 +275,32 @@ def parse_arguments():
 
     parser.add_argument("--port", type=int, default=1883, help="MQTT broker port")
 
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Logging level",
+    )
 
     parser.add_argument("--client-id", type=str, default="rasptank", help="MQTT client ID")
 
     return parser.parse_args()
 
 
+@log_function_call()
 def main():
     """Main entry point."""
-    global rasptank_hardware, mqtt_client, movement_controller, action_controller, running
+    global rasptank_hardware, mqtt_client, movement_controller, action_controller, running, logger
 
     # Parse command line arguments
     args = parse_arguments()
 
-    # Configure logging level
-    logging_level = logging.DEBUG if args.debug else logging.INFO
-    logging.getLogger().setLevel(logging_level)
-    logger.setLevel(logging_level)
+    # Configure logging
+    logger = create_logger(args.log_level)
+
+    component_logger = logger.with_component("main")
+    component_logger.infow("Starting Rasptank main application")
 
     # Setup signal handlers
     signal.signal(signal.SIGINT, signal_handler)
@@ -291,22 +309,26 @@ def main():
     # Initialize resources
     try:
         # Initialize MQTT Client
-        logger.info(f"Connecting to MQTT broker at {args.broker}:{args.port}")
+        mqtt_logger = logger.with_component("mqtt")
+        mqtt_logger.infow("Connecting to MQTT broker", "broker", args.broker, "port", args.port)
+
         mqtt_client = MQTTClient(
             broker_address=args.broker, broker_port=args.port, client_id=args.client_id
         )
 
         if not mqtt_client.connect() or not mqtt_client.wait_for_connection(timeout=10):
-            logger.error("Unable to connect to MQTT broker")
+            mqtt_logger.fatalw("Unable to connect to MQTT broker")
             return 1
 
         # Initialize Rasptank Hardware
-        logger.info("Initializing Rasptank hardware")
+        hw_logger = logger.with_component("hardware")
+        hw_logger.infow("Initializing Rasptank hardware")
         rasptank_hardware = RasptankHardware()
         time.sleep(0.2)  # hardware initialization pause
 
         # Initialize MQTT Movement Controller
-        logger.info("Initializing MQTT Movement Controller")
+        movement_logger = logger.with_component("movement")
+        movement_logger.infow("Initializing MQTT Movement Controller")
         movement_controller = MQTTMovementController(
             hardware=rasptank_hardware,
             mqtt_client=mqtt_client,
@@ -315,27 +337,33 @@ def main():
         )
 
         # Initialize Action Controller
-        logger.info("Initializing Action Controller")
+        action_logger = logger.with_component("action")
+        action_logger.infow("Initializing Action Controller")
         action_controller = ActionController(rasptank_hardware)
 
         # IR Receiver setup
-        logger.info("Setting up IR receiver")
+        ir_logger = logger.with_component("ir_receiver")
+        ir_logger.infow("Setting up IR receiver")
         if not rasptank_hardware.ir_receiver.setup_ir_receiver(
             client=mqtt_client, led_command_queue=rasptank_hardware.get_led_command_queue()
         ):
-            logger.error("IR receiver setup failed")
+            ir_logger.fatalw("IR receiver setup failed")
             return 1
 
         time.sleep(0.2)
 
         # MQTT Subscriptions
+        mqtt_logger.debugw(
+            "Setting up MQTT subscriptions",
+            "topics",
+            f"{SHOOT_COMMAND_TOPIC}",
+        )
         mqtt_client.subscribe(SHOOT_COMMAND_TOPIC, qos=0, callback=handle_shoot_command)
-        mqtt_client.subscribe(CAMERA_COMMAND_TOPIC, qos=0, callback=handle_camera_command)
 
         # Periodic status updates
         publish_status_update()
 
-        logger.info("Rasptank initialization complete")
+        component_logger.infow("Rasptank initialization complete")
 
         # Main event loop
         while running:
@@ -350,25 +378,26 @@ def main():
             try:
                 command = rasptank_hardware.led_command_queue.get(timeout=0.1)
                 if command == "hit":
-                    logger.info("Hit event processed in main loop")
+                    led_logger = logger.with_component("led")
+                    led_logger.infow("Hit event processed in main loop")
                     rasptank_hardware.led_strip.hit_animation()
             except Empty:
                 pass  # Normal condition, no commands in queue
             except Exception as e:
-                logger.error(f"Error in main loop: {e}")
+                component_logger.errorw("Error in main loop", "error", str(e), exc_info=True)
 
             time.sleep(0.05)  # 50ms
 
     except KeyboardInterrupt:
-        logger.info("KeyboardInterrupt detected, exiting...")
+        component_logger.infow("KeyboardInterrupt detected, exiting...")
     except Exception as e:
-        logger.error(f"Unexpected error in main loop: {e}", exc_info=True)
+        component_logger.errorw("Unexpected error in main loop", "error", str(e), exc_info=True)
         return 1
     finally:
-        logger.info("Commencing cleanup...")
+        component_logger.infow("Commencing cleanup...")
         cleanup()
 
-    logger.info("Rasptank shutdown complete")
+    component_logger.infow("Rasptank shutdown complete")
     return 0
 
 
