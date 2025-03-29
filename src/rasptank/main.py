@@ -25,7 +25,6 @@ from src.common.mqtt.client import MQTTClient
 
 # Import from src.rasptank
 from src.rasptank.action import ActionController
-from src.rasptank.hardware.led_strip import LedStripState
 from src.rasptank.hardware.main import RasptankHardware
 from src.rasptank.movement.controller.mqtt import MQTTMovementController
 
@@ -310,10 +309,11 @@ def main():
     try:
         # Initialize MQTT Client
         mqtt_logger = logger.with_component("mqtt")
-        mqtt_logger.infow("Connecting to MQTT broker", "broker", args.broker, "port", args.port)
-
         mqtt_client = MQTTClient(
-            broker_address=args.broker, broker_port=args.port, client_id=args.client_id
+            logger=mqtt_logger,
+            broker_address=args.broker,
+            broker_port=args.port,
+            client_id=args.client_id,
         )
 
         if not mqtt_client.connect() or not mqtt_client.wait_for_connection(timeout=10):
@@ -322,14 +322,13 @@ def main():
 
         # Initialize Rasptank Hardware
         hw_logger = logger.with_component("hardware")
-        hw_logger.infow("Initializing Rasptank hardware")
         rasptank_hardware = RasptankHardware()
         time.sleep(0.2)  # hardware initialization pause
 
         # Initialize MQTT Movement Controller
         movement_logger = logger.with_component("movement")
-        movement_logger.infow("Initializing MQTT Movement Controller")
         movement_controller = MQTTMovementController(
+            logger=movement_logger,
             hardware=rasptank_hardware,
             mqtt_client=mqtt_client,
             command_topic=MOVEMENT_COMMAND_TOPIC,

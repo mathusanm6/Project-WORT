@@ -1,13 +1,11 @@
 """This module provides a class for controlling the LED strip on the Rasptank."""
 
-import logging
-import threading
-import time
 from enum import Enum
 
 from RPi import GPIO
 from rpi_ws281x import Adafruit_NeoPixel, Color
 
+from src.common.logging.logger_factory import LoggerFactory
 from src.rasptank.hardware.led_animations import AnimationType, LedAnimationThread
 
 
@@ -26,8 +24,12 @@ class LedStripState(Enum):
 class RasptankLedStrip:
     """Class for controlling the LED strip on the Rasptank."""
 
-    def __init__(self):
+    def __init__(self, led_strip_logger: LoggerFactory):
         """Initialize the LED strip."""
+        # Create logger
+        self.logger = led_strip_logger
+        self.logger.infow("Initializing Rasptank LED strip")
+
         # LED strip configuration
         self.LED_COUNT = 12  # Number of LED pixels
         self.LED_PIN = 12  # GPIO pin connected to the pixels
@@ -50,6 +52,16 @@ class RasptankLedStrip:
         self.team_color = self.COLOR_BLUE  # Default team
 
         # Initialize the strip
+        self.logger.debugw(
+            "Creating NeoPixel instance",
+            "led_count",
+            self.LED_COUNT,
+            "led_pin",
+            self.LED_PIN,
+            "led_freq",
+            self.LED_FREQ_HZ,
+        )
+
         self.strip = Adafruit_NeoPixel(
             self.LED_COUNT,
             self.LED_PIN,
@@ -65,14 +77,19 @@ class RasptankLedStrip:
         self.set_color(self.COLOR_BLUE)
 
         # Start the animation thread
+        self.logger.debugw("Starting LED animation thread")
         self.animation_thread = LedAnimationThread(self.set_color, self.team_color)
         self.animation_thread.start()
+
+        self.logger.infow("LED strip initialized")
 
     def set_color(self, color):
         """Set all LEDs to the same color."""
         try:
             # Extract RGB components
             r, g, b = color
+
+            self.logger.debugw("Setting LED color", "r", r, "g", g, "b", b)
 
             # Set each pixel's color
             for i in range(self.strip.numPixels()):
@@ -81,10 +98,12 @@ class RasptankLedStrip:
             # Update the strip
             self.strip.show()
         except Exception as e:
-            logging.error(f"Error setting LED color: {e}")
+            self.logger.errorw("Error setting LED color", "error", str(e), exc_info=True)
 
     def set_team(self, team):
         """Set the team color and persist it as the default state."""
+        self.logger.infow("Setting team color", "team", team)
+
         if team.lower() == "blue":
             self.team_color = self.COLOR_BLUE
             self.current_state = LedStripState.TEAM_BLUE
@@ -94,17 +113,21 @@ class RasptankLedStrip:
             self.current_state = LedStripState.TEAM_RED
             self.set_color(self.COLOR_RED)
         else:
-            logging.warning(f"Unknown team color: {team}. Using blue as default.")
+            self.logger.warnw("Unknown team color, using blue as default", "team", team)
             self.team_color = self.COLOR_BLUE
             self.current_state = LedStripState.TEAM_BLUE
             self.set_color(self.COLOR_BLUE)
 
     def hit_animation(self, duration=2.0):
+        """Play the hit animation."""
+        self.logger.debugw("Starting hit animation", "duration", duration)
         self.strip.begin()
         self.current_state = LedStripState.HIT
         self.animation_thread.set_animation(AnimationType.HIT, duration)
 
     def capturing_animation(self):
+        """Play the capturing animation."""
+        self.logger.debugw("Starting capturing animation")
         self.strip.begin()
         self.current_state = LedStripState.CAPTURING
         self.animation_thread.set_animation(
@@ -112,16 +135,22 @@ class RasptankLedStrip:
         )  # Infinite until stopped explicitly
 
     def scored_animation(self, duration=3.0):
+        """Play the scored animation."""
+        self.logger.debugw("Starting scored animation", "duration", duration)
         self.strip.begin()
         self.current_state = LedStripState.SCORED
         self.animation_thread.set_animation(AnimationType.SCORED, duration)
 
     def flag_possessed(self, duration=9999):
+        """Play the flag possessed animation."""
+        self.logger.debugw("Starting flag possessed animation", "duration", duration)
         self.strip.begin()
         self.current_state = LedStripState.FLAG_POSSESSED
         self.animation_thread.set_animation(AnimationType.FLAG_POSSESSED, duration)
 
     def stop_animations(self):
+        """Stop all animations and return to team color."""
+        self.logger.debugw("Stopping animations")
         self.strip.begin()
         self.current_state = self.team_color
         self.animation_thread.stop_animation()
@@ -129,16 +158,26 @@ class RasptankLedStrip:
 
     def turn_off(self):
         """Turn off all LEDs."""
+        self.logger.debugw("Turning off all LEDs")
         self.strip.begin()
         self.current_state = LedStripState.IDLE
         self.set_color(self.COLOR_OFF)
 
     def cleanup(self):
         """Clean up resources before exiting."""
+        self.logger.infow("Cleaning up LED strip resources")
 
-        self.animation_thread.stop()
-        self.animation_thread.join(timeout=1)
+        try:
+            self.animation_thread.stop()
+            self.animation_thread.join(timeout=1)
+            self.logger.debugw("Animation thread stopped")
+        except Exception as e:
+            self.logger.errorw("Error stopping animation thread", "error", str(e), exc_info=True)
 
-        self.turn_off()
+        try:
+            self.turn_off()
+            self.logger.debugw("LEDs turned off")
+        except Exception as e:
+            self.logger.errorw("Error turning off LEDs", "error", str(e), exc_info=True)
 
-        logging.info("LED strip cleanup complete")
+        self.logger.infow("LED strip cleanup complete")
