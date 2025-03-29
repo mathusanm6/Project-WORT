@@ -1,11 +1,9 @@
 """This module holds an optimized collection of feedback mechanisms for the Dualsense controller."""
 
 import math
-import queue
 import threading
 import time
 from enum import Enum, auto
-from typing import Any, Dict, Optional, Tuple
 
 from src.common.constants.controller import BATTERY_CRITICAL_LEVEL, BATTERY_WARNING_LEVEL
 from src.common.constants.game import FLAG_CAPTURE_DURATION
