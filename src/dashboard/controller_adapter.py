@@ -499,12 +499,12 @@ class ControllerAdapter:
             self.thrust_direction = ThrustDirection.NONE
             speed_mode = SpeedMode.STOP
 
-        # If we're not thrusting but we are turning, use spin instead of curve
+        # If we're not thrusting but we are turning, use the current turn mode (pivot or spin)
         if (
             self.thrust_direction is ThrustDirection.NONE
             and self.turn_direction is not TurnDirection.NONE
         ):
-            self.turn_type = TurnType.SPIN
+            self.turn_type = TurnType.PIVOT if self.pivot_mode else TurnType.SPIN
             speed_mode = self.speed_modes[self.current_speed_mode_idx]
 
         # Only send command if there's actual movement
