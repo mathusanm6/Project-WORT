@@ -3,15 +3,14 @@ Reusable MQTT client for both Rasptank and PC controller.
 This module provides a consistent interface for MQTT communications.
 """
 
-import logging
 import threading
 import uuid
 from typing import Any, Callable, Optional
 
 import paho.mqtt.client as mqtt
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+from src.common.logging.decorators import log_function_call
+from src.common.logging.logger_api import Logger
 
 
 class MQTTClient:
@@ -19,6 +18,7 @@ class MQTTClient:
 
     def __init__(
         self,
+        mqtt_logger: Logger,
         broker_address: str = "192.168.1.200",
         broker_port: int = 1883,
         client_id: str = "",
@@ -28,13 +28,16 @@ class MQTTClient:
         """Initialize the MQTT client.
 
         Args:
+            mqtt_logger (Logger): Logger instance for MQTT client
             broker_address (str): MQTT broker address
             broker_port (int): MQTT broker port
             client_id (str): Client identifier, leave empty for auto-generation
             keep_alive (int): Keep-alive interval in seconds
             reconnect_delay (int): Reconnection delay in seconds
         """
-        self.logger = logging.getLogger(f"MQTTClient-{client_id or 'auto'}")
+        self.logger = mqtt_logger
+
+        self.logger.infow("Initializing MQTT client", "broker", broker_address, "port", broker_port)
 
         # MQTT configuration
         self.broker_address = broker_address
@@ -58,6 +61,17 @@ class MQTTClient:
         # Automatic reconnection
         self.client.reconnect_delay_set(min_delay=1, max_delay=reconnect_delay)
 
+        self.logger.debugw(
+            "MQTT client initialized",
+            "client_id",
+            self.client_id,
+            "keep_alive",
+            keep_alive,
+            "reconnect_delay",
+            reconnect_delay,
+        )
+
+    @log_function_call()
     def connect(self) -> bool:
         """Connect to the MQTT broker.
 
@@ -65,9 +79,10 @@ class MQTTClient:
             bool: True if connection was initiated, False otherwise
         """
         try:
-            self.logger.info(
-                f"Connecting to MQTT broker at {self.broker_address}:{self.broker_port}"
+            self.logger.infow(
+                "Connecting to MQTT broker", "broker", self.broker_address, "port", self.broker_port
             )
+
             self.client.connect_async(
                 host=self.broker_address,
                 port=self.broker_port,
@@ -76,18 +91,20 @@ class MQTTClient:
             self.client.loop_start()
             return True
         except Exception as e:
-            self.logger.error(f"Failed to connect to MQTT broker: {e}")
+            self.logger.errorw("Failed to connect to MQTT broker", "error", str(e), exc_info=True)
             return False
 
     def disconnect(self):
         """Disconnect from the MQTT broker."""
         try:
-            self.logger.info("Disconnecting from MQTT broker")
+            self.logger.infow("Disconnecting from MQTT broker")
             self.client.loop_stop()
             self.client.disconnect()
             self.connected.clear()
         except Exception as e:
-            self.logger.error(f"Error disconnecting from MQTT broker: {e}")
+            self.logger.errorw(
+                "Error disconnecting from MQTT broker", "error", str(e), exc_info=True
+            )
 
     def wait_for_connection(self, timeout: float = 10.0) -> bool:
         """Wait for connection to be established.
@@ -98,7 +115,12 @@ class MQTTClient:
         Returns:
             bool: True if connected, False if timeout occurred
         """
-        return self.connected.wait(timeout=timeout)
+        result = self.connected.wait(timeout=timeout)
+        if result:
+            self.logger.debugw("Successfully connected to MQTT broker", "timeout_value", timeout)
+        else:
+            self.logger.warnw("Connection timeout to MQTT broker", "timeout_value", timeout)
+        return result
 
     def subscribe(self, topic: str, qos: int = 0, callback: Optional[Callable] = None):
         """Subscribe to a topic.
@@ -113,10 +135,10 @@ class MQTTClient:
             self.topic_handlers[topic] = callback
 
         if self.connected.is_set():
-            self.logger.info(f"Subscribing to topic: {topic}")
+            self.logger.infow("Subscribing to topic", "topic", topic, "qos", qos)
             self.client.subscribe(topic, qos)
         else:
-            self.logger.warning(f"Cannot subscribe to {topic}: Not connected to broker")
+            self.logger.warnw("Cannot subscribe to topic: Not connected", "topic", topic)
 
     def unsubscribe(self, topic: str):
         """Unsubscribe from a topic.
@@ -128,10 +150,10 @@ class MQTTClient:
             del self.topic_handlers[topic]
 
         if self.connected.is_set():
-            self.logger.info(f"Unsubscribing from topic: {topic}")
+            self.logger.infow("Unsubscribing from topic", "topic", topic)
             self.client.unsubscribe(topic)
         else:
-            self.logger.warning(f"Cannot unsubscribe from {topic}: Not connected to broker")
+            self.logger.warnw("Cannot unsubscribe from topic: Not connected", "topic", topic)
 
     def publish(self, topic: str, payload: str, qos: int = 0, retain: bool = False) -> bool:
         """Publish a message to a topic.
@@ -146,26 +168,39 @@ class MQTTClient:
             bool: True if publish initiated, False otherwise
         """
         if not self.connected.is_set():
-            self.logger.warning(f"Cannot publish to {topic}: Not connected to broker")
+            self.logger.warnw("Cannot publish: Not connected", "topic", topic)
             return False
 
         try:
-            self.logger.debug(f"Publishing to {topic}: {payload}")
+            self.logger.debugw(
+                "Publishing message",
+                "topic",
+                topic,
+                "payload",
+                payload,
+                "qos",
+                qos,
+                "retain",
+                retain,
+            )
+
             self.client.publish(topic, payload, qos=qos, retain=retain)
             return True
         except Exception as e:
-            self.logger.error(f"Error publishing to {topic}: {e}")
+            self.logger.errorw(
+                "Error publishing message", "topic", topic, "error", str(e), exc_info=True
+            )
             return False
 
     def _on_connect(self, client, userdata, flags, rc):
         """Callback for when the client connects to the broker."""
         if rc == 0:
-            self.logger.info(f"Connected to MQTT broker (RC={rc})")
+            self.logger.infow("Connected to MQTT broker", "rc", rc, "client_id", self.client_id)
             self.connected.set()
 
             # Resubscribe to all topics
             for topic in self.topic_handlers:
-                self.logger.info(f"Resubscribing to topic: {topic}")
+                self.logger.debugw("Resubscribing to topic", "topic", topic)
                 self.client.subscribe(topic)
         else:
             connection_results = {
@@ -176,16 +211,28 @@ class MQTTClient:
                 5: "Connection refused - not authorized",
             }
             error_msg = connection_results.get(rc, f"Unknown error code: {rc}")
-            self.logger.error(f"Failed to connect to MQTT broker: {error_msg}")
+            self.logger.errorw(
+                "Failed to connect to MQTT broker",
+                "rc",
+                rc,
+                "error",
+                error_msg,
+                "client_id",
+                self.client_id,
+            )
 
     def _on_disconnect(self, client, userdata, rc):
         """Callback for when the client disconnects from the broker."""
         self.connected.clear()
 
         if rc == 0:
-            self.logger.info("Disconnected from MQTT broker (clean disconnect)")
+            self.logger.infow(
+                "Disconnected from MQTT broker (clean disconnect)", "client_id", self.client_id
+            )
         else:
-            self.logger.warning(f"Unexpected disconnect from MQTT broker (RC={rc})")
+            self.logger.warnw(
+                "Unexpected disconnect from MQTT broker", "rc", rc, "client_id", self.client_id
+            )
 
     def _on_message(self, client, userdata, msg):
         """Callback for when a message is received from the broker."""
@@ -195,11 +242,15 @@ class MQTTClient:
             qos = msg.qos
             retain = msg.retain
 
-            self.logger.debug(f"Received message on {topic}: {payload}")
+            self.logger.debugw(
+                "Received message", "topic", topic, "payload", payload, "qos", qos, "retain", retain
+            )
 
             # If we have a handler for this topic, call it
             if topic in self.topic_handlers:
                 handler = self.topic_handlers[topic]
                 handler(self, topic, payload, qos, retain)
         except Exception as e:
-            self.logger.error(f"Error handling message on {topic}: {e}")
+            self.logger.errorw(
+                "Error handling message", "topic", topic, "error", str(e), exc_info=True
+            )

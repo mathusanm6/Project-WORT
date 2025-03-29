@@ -4,7 +4,6 @@ This controller receives movement commands via MQTT and translates
 them into actual movement commands for the Rasptank.
 """
 
-import logging
 import threading
 from typing import Optional
 
@@ -17,24 +16,16 @@ from src.common.enum.movement import (
     TurnDirection,
     TurnType,
 )
+from src.common.logging.decorators import log_function_call
+
+# Import from logging system
+from src.common.logging.logger_api import Logger
 from src.common.mqtt.client import MQTTClient
-from src.rasptank.hardware.main import RasptankHardware
 
 # Import from src.rasptank
+from src.rasptank.hardware.main import RasptankHardware
 from src.rasptank.movement.controller.base import BaseMovementController
 from src.rasptank.movement.movement_api import State
-
-# Configure logging
-logger = logging.getLogger("MQTTMovementController")
-logger.setLevel(logging.INFO)  # Ensure the logger is set to a level that will display your messages
-
-# If the logger doesn't have handlers, add a console handler
-if not logger.handlers:
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
 
 
 class MQTTMovementController(BaseMovementController):
@@ -46,6 +37,7 @@ class MQTTMovementController(BaseMovementController):
 
     def __init__(
         self,
+        movement_logger: Logger,
         hardware: RasptankHardware,
         mqtt_client: Optional[MQTTClient] = None,
         broker_address: str = "192.168.1.200",
@@ -65,34 +57,39 @@ class MQTTMovementController(BaseMovementController):
         """
         super().__init__()  # Initialize the base class (BaseMovementController) with default state
 
+        # Create a logger for this component
+        self.logger = movement_logger
+
         # Hardware-specific implementation
         self.hardware = hardware
 
         # Initialize MQTT client or use provided one
         self.mqtt_client = mqtt_client
         if self.mqtt_client is None:
-            logger.info(f"Creating new MQTT client with broker: {broker_address}:{broker_port}")
+            mqtt_logger = self.logger.with_component("mqtt")
             self.mqtt_client = MQTTClient(
+                mqtt_logger=mqtt_logger,
                 broker_address=broker_address,
                 broker_port=broker_port,
                 client_id="rasptank-movement",
             )
             self.mqtt_client.connect()
-            logger.info("MQTT client connected")
         else:
-            logger.info("Using provided MQTT client")
+            self.logger.infow("Using provided MQTT client", "client_id", self.mqtt_client.client_id)
 
         # Set up topics
         self.command_topic = command_topic
         self.state_topic = state_topic
-        logger.info(f"Command topic: {command_topic}, State topic: {state_topic}")
+        self.logger.debugw(
+            "Controller configuration", "command_topic", command_topic, "state_topic", state_topic
+        )
 
         # For handling timed movements
         self.timer_lock = threading.Lock()
         self.pending_timers = {}
 
         # Subscribe to command topic
-        logger.info(f"Subscribing to command topic: {self.command_topic}")
+        self.logger.infow("Subscribing to command topic", "topic", self.command_topic)
         self.mqtt_client.subscribe(
             topic=self.command_topic,
             qos=0,  # QoS 0 for movement command messages
@@ -101,8 +98,6 @@ class MQTTMovementController(BaseMovementController):
 
         # Publish initial state
         self._publish_state()
-
-        logger.info("MQTT Movement Controller initialized and ready")
 
     def _handle_command(self, client, topic, payload, qos, retain):
         """Handle movement commands received via MQTT.
@@ -114,7 +109,7 @@ class MQTTMovementController(BaseMovementController):
             qos (int): The QoS level of the message
             retain (bool): Whether the message was a retained message
         """
-        logger.info(f"Received movement command on topic {topic}: {payload}")
+        self.logger.debugw("Received movement command", "topic", topic, "payload", payload)
 
         try:
             # Parse command message
@@ -122,7 +117,7 @@ class MQTTMovementController(BaseMovementController):
             parts = payload.split(";")
 
             if len(parts) < 5:
-                logger.warning(f"Invalid command format: {payload}")
+                self.logger.warnw("Invalid command format", "payload", payload, "expected_parts", 5)
                 return
 
             # Extract values
@@ -132,71 +127,92 @@ class MQTTMovementController(BaseMovementController):
             speed_value = int(parts[3])
             curved_turn_rate_float = float(parts[4])
 
-            logger.info(
-                f"Parsed command: thrust_direction={thrust_dir_str}, turn_direction={turn_dir_str}, turn_type={turn_type_str}, speed_value={speed_value}, curved_turn_rate={curved_turn_rate_float}"
+            self.logger.debugw(
+                "Parsed command",
+                "thrust_direction",
+                thrust_dir_str,
+                "turn_direction",
+                turn_dir_str,
+                "turn_type",
+                turn_type_str,
+                "speed_value",
+                speed_value,
+                "curved_turn_rate",
+                curved_turn_rate_float,
             )
 
             # Map string values to enum values
             try:
                 thrust_direction = ThrustDirection(thrust_dir_str)
             except ValueError:
-                logger.warning(f"Invalid thrust direction: {thrust_dir_str}")
+                self.logger.warnw("Invalid thrust direction", "value", thrust_dir_str)
                 thrust_direction = ThrustDirection.NONE
 
             try:
                 turn_direction = TurnDirection(turn_dir_str)
             except ValueError:
-                logger.warning(f"Invalid turn direction: {turn_dir_str}")
+                self.logger.warnw("Invalid turn direction", "value", turn_dir_str)
                 turn_direction = TurnDirection.NONE
 
             try:
                 turn_type = TurnType(turn_type_str)
             except ValueError:
-                logger.warning(f"Invalid turn type: {turn_type_str}")
+                self.logger.warnw("Invalid turn type", "value", turn_type_str)
                 turn_type = TurnType.NONE
 
             try:
                 speed_mode = SpeedMode(speed_value)
             except ValueError:
-                logger.warning(f"Invalid speed value: {speed_value}")
+                self.logger.warnw("Invalid speed value", "value", speed_value)
                 speed_mode = SpeedMode.STOP
 
             try:
                 curved_turn_rate = CurvedTurnRate(curved_turn_rate_float)
             except ValueError:
-                logger.warning(f"Invalid curved turn rate: {curved_turn_rate_float}")
+                self.logger.warnw("Invalid curved turn rate", "value", curved_turn_rate_float)
                 curved_turn_rate = CurvedTurnRate.NONE
 
             # Apply the movement
-            logger.info(
-                f"Applying movement: thrust_direction={thrust_direction}, turn_direction={turn_direction}, turn_type={turn_type}, speed_mode={speed_mode}, curved_turn_rate={curved_turn_rate}"
+            self.logger.debugw(
+                "Applying movement",
+                "thrust_direction",
+                thrust_direction.value,
+                "turn_direction",
+                turn_direction.value,
+                "turn_type",
+                turn_type.value,
+                "speed_mode",
+                speed_mode.value,
+                "curved_turn_rate",
+                curved_turn_rate.value,
             )
             self.move(thrust_direction, turn_direction, turn_type, speed_mode, curved_turn_rate)
 
         except Exception as e:
-            logger.error(f"Error handling movement command: {e}", exc_info=True)
+            self.logger.errorw("Error handling movement command", "error", str(e), exc_info=True)
 
     def _publish_state(self):
         """Publish the current movement state via MQTT."""
         if not self.mqtt_client.connected.is_set():
-            logger.warning("MQTT client not connected, skipping state publication")
+            self.logger.warnw("MQTT client not connected, skipping state publication")
             return
 
         try:
             state = self.get_state()
             # Format: "<thrust_direction>;<turn_direction>;<turn_type>;<speed_mode>;<curved_turn_rate>"
-            state_str = f"{state.thrust_direction};{state.turn_direction};{state.turn_type};{state.speed_mode};{state.curved_turn_rate}"
+            state_str = f"{state.thrust_direction.value};{state.turn_direction.value};{state.turn_type.value};{state.speed_mode.value};{state.curved_turn_rate.value}"
 
-            logger.info(f"Publishing movement state: {state_str}")
+            self.logger.debugw("Publishing movement state", "state", state_str)
             self.mqtt_client.publish(
                 topic=self.state_topic,
                 payload=state_str,
                 qos=0,  # QoS 0 for movement state messages
             )
         except Exception as e:
-            logger.error(f"Error publishing movement state: {e}", exc_info=True)
+            self.logger.errorw("Error publishing movement state", "error", str(e), exc_info=True)
 
     # Override _apply_movement method from BaseMovementController
+    @log_function_call()
     def _apply_movement(
         self,
         thrust_direction: ThrustDirection,
@@ -206,17 +222,24 @@ class MQTTMovementController(BaseMovementController):
         curved_turn_rate: CurvedTurnRate,
     ) -> State:
         # Log before applying movement
-        logger.info(
-            f"Sending to hardware: thrust_direction={thrust_direction}, turn_direction={turn_direction}, turn_type={turn_type}, speed_mode={speed_mode}, curved_turn_rate={curved_turn_rate}"
+        self.logger.debugw(
+            "Sending to hardware",
+            "thrust_direction",
+            thrust_direction.value,
+            "turn_direction",
+            turn_direction.value,
+            "turn_type",
+            turn_type.value,
+            "speed_mode",
+            speed_mode.value,
+            "curved_turn_rate",
+            curved_turn_rate.value,
         )
 
         # Apply movement to hardware
         self.hardware.move_rasptank_hardware(
             thrust_direction, turn_direction, turn_type, speed_mode, curved_turn_rate
         )
-
-        # Log after applying movement
-        logger.info("Movement applied to hardware")
 
         # Update and return current state
         self._state = State(
@@ -227,20 +250,23 @@ class MQTTMovementController(BaseMovementController):
             curved_turn_rate=curved_turn_rate,
         )
 
+        # Publish state update
+        self._publish_state()
+
         return self._state
 
     def cleanup(self):
         """Clean up resources."""
-        logger.info("Cleaning up MQTT Movement Controller resources")
+        self.logger.infow("Cleaning up MQTT Movement Controller resources")
 
         # Cancel all pending timers
         with self.timer_lock:
             for timer_id in list(self.pending_timers.keys()):
-                logger.info(f"Cancelling timer {timer_id}")
+                self.logger.debugw("Cancelling timer", "timer_id", timer_id)
                 self.pending_timers[timer_id].cancel()
             self.pending_timers.clear()
-            logger.info("All timers cancelled")
+            self.logger.debugw("All timers cancelled")
 
         # We don't disconnect the MQTT client here since it might be shared
         # The owning object is responsible for disconnecting the client
-        logger.info("MQTT Movement Controller cleanup complete")
+        self.logger.infow("MQTT Movement Controller cleanup complete")
