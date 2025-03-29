@@ -7,6 +7,9 @@ them into actual movement commands for the Rasptank.
 import threading
 from typing import Optional
 
+# Import from src.rasptank
+from rasptank.hardware.hardware_main import RasptankHardware
+
 # Import from src.common
 from src.common.constants.movement import MOVEMENT_COMMAND_TOPIC, MOVEMENT_STATE_TOPIC
 from src.common.enum.movement import (
@@ -21,9 +24,6 @@ from src.common.logging.decorators import log_function_call
 # Import from logging system
 from src.common.logging.logger_api import Logger
 from src.common.mqtt.client import MQTTClient
-
-# Import from src.rasptank
-from src.rasptank.hardware.main import RasptankHardware
 from src.rasptank.movement.controller.base import BaseMovementController
 from src.rasptank.movement.movement_api import State
 

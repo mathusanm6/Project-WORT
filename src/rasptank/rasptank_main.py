@@ -25,7 +25,7 @@ from src.common.mqtt.client import MQTTClient
 
 # Import from src.rasptank
 from src.rasptank.action import ActionController
-from src.rasptank.hardware.main import RasptankHardware
+from src.rasptank.hardware.hardware_main import RasptankHardware
 from src.rasptank.movement.controller.mqtt import MQTTMovementController
 
 # Global variables for resources that need cleanup
