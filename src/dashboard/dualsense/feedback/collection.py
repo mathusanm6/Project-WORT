@@ -18,7 +18,7 @@ from src.common.enum.movement import (
 from src.common.logging.logger_api import Logger
 
 # Import from src.dashboard
-from src.dashboard.game_controller.dualsense_feedback import DualSenseFeedback
+from src.dashboard.dualsense.feedback.feedback_main import DualSenseFeedback
 
 
 class DualsenseFeedbackCollection:

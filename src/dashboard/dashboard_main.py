@@ -31,7 +31,7 @@ from src.common.mqtt.client import MQTTClient
 
 # Import from src.dashboard
 from src.dashboard.controller_adapter import ControllerAdapter
-from src.dashboard.game_controller.dualsense_controller import DualSenseController
+from src.dashboard.dualsense.controller import DualSenseController
 
 # Global variables
 mqtt_client = None
