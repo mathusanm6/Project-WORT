@@ -310,7 +310,7 @@ def main():
         # Initialize MQTT Client
         mqtt_logger = logger.with_component("mqtt")
         mqtt_client = MQTTClient(
-            logger=mqtt_logger,
+            mqtt_logger=mqtt_logger,
             broker_address=args.broker,
             broker_port=args.port,
             client_id=args.client_id,
