@@ -5,7 +5,6 @@ This adapter converts raw controller inputs into commands
 compatible with the RaspTank hardware implementation.
 """
 
-import math
 from typing import Any, Callable, Dict, Optional
 
 # Import from src.common
