@@ -111,6 +111,7 @@ python_packages = [
     "pygame",
     "pyzbar",
     "pyqrcode",
+    "colorama",
 ]
 
 print("Step 3: Installing Python packages...")
