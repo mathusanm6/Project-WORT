@@ -93,7 +93,7 @@ for command in system_deps:
 
 # Install Python packages inside the virtual environment
 python_packages = [
-    "RPi.GPIO",
+    "rpi-lgpio",  # Do not install RPi.GPIO (RuntimeError: Failed to add edge detection)
     "adafruit-pca9685",
     "rpi_ws281x",
     "mpu6050-raspberrypi",

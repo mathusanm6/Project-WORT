@@ -5,7 +5,7 @@ import threading
 import time
 from enum import Enum
 
-import RPi.GPIO as GPIO
+from RPi import GPIO
 from rpi_ws281x import Adafruit_NeoPixel, Color
 
 from src.rasptank.hardware.led_animations import AnimationType, LedAnimationThread

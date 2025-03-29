@@ -7,7 +7,7 @@ import uuid
 from time import sleep, time
 
 import Adafruit_PCA9685
-import RPi.GPIO as GPIO
+from RPi import GPIO
 from rpi_ws281x import *
 
 import dashboard.shoot.InfraLib as InfraLib

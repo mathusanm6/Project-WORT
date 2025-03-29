@@ -10,7 +10,7 @@ import time
 from datetime import datetime
 from functools import reduce
 
-import RPi.GPIO as GPIO
+from RPi import GPIO
 
 #####################################
 #             IR Blaster            #
