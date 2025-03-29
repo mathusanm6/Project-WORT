@@ -136,7 +136,7 @@ class MQTTClient:
             self.topic_handlers[topic] = callback
 
         if self.connected.is_set():
-            # self.logger.info("Subscribing to topic", "topic", topic, "qos", str(qos))
+            self.logger.infow("Subscribing to topic", "topic", topic, "qos", str(qos))
             self.client.subscribe(topic, qos)
         else:
             self.logger.warnw("Cannot subscribe to topic: Not connected", "topic", topic)
@@ -227,7 +227,7 @@ class MQTTClient:
         self.connected.clear()
 
         if rc == 0:
-            self.logger.info(
+            self.logger.infow(
                 "Disconnected from MQTT broker (clean disconnect)", "client_id", self.client_id
             )
         else:
