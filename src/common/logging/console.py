@@ -64,6 +64,8 @@ class ConsoleLogger(Logger):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(self.level)
 
+        self.logger.propagate = False
+
         # Set up handler if not already configured
         if not self.logger.handlers:
             self._setup_logger()
