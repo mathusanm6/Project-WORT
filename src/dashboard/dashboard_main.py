@@ -251,26 +251,11 @@ def handle_game_event(client, topic, payload, qos, retain):
             logger.debugw("Flag capture event", "state", capture_flag_state)
 
             if capture_flag_state == "started":
-                if current_speed_mode:
-                    dualsense_controller.feedback_collection.on_flag_capture_started(
-                        *current_speed_mode.color
-                    )
-                else:
-                    dualsense_controller.feedback_collection.on_flag_capture_started(255, 255, 255)
+                dualsense_controller.feedback_collection.on_capture_flag()
             elif capture_flag_state == "captured":
-                if current_speed_mode:
-                    dualsense_controller.feedback_collection.on_flag_captured(
-                        *current_speed_mode.color
-                    )
-                else:
-                    dualsense_controller.feedback_collection.on_flag_captured(255, 255, 255)
+                dualsense_controller.feedback_collection.on_flag_captured()
             elif capture_flag_state == "failed":
-                if current_speed_mode:
-                    dualsense_controller.feedback_collection.on_flag_capture_failed(
-                        *current_speed_mode.color
-                    )
-                else:
-                    dualsense_controller.feedback_collection.on_flag_capture_failed(255, 255, 255)
+                dualsense_controller.feedback_collection.on_flag_capture_failed()
             else:
                 # Unknown state
                 logger.warnw("Unknown flag capture state", "state", capture_flag_state)
@@ -280,10 +265,7 @@ def handle_game_event(client, topic, payload, qos, retain):
             shooter = parts[1] if len(parts) > 1 else "Unknown"
             logger.infow("Hit by IR shot", "shooter", shooter)
 
-            if current_speed_mode:
-                dualsense_controller.feedback_collection.on_hit_by_shot(*current_speed_mode.color)
-            else:
-                dualsense_controller.feedback_collection.on_hit_by_shot(255, 255, 255)
+            dualsense_controller.feedback_collection.on_hit_by_shot()
 
         elif event_type == "scanning_qr":
             # QR scanning attempt - distinctive feedback
