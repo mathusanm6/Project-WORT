@@ -645,7 +645,7 @@ def main():
 
             # Update the dashboard periodically
             if current_time - last_dashboard_update >= dashboard_update_interval:
-                print_dashboard()
+                # print_dashboard()
                 last_dashboard_update = current_time
 
             # Sleep to avoid busy waiting
