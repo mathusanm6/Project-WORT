@@ -26,6 +26,7 @@ class ActionController:
         Returns:
             bool: True if the shoot action was successful, False otherwise.
         """
+        self.logger.infow("Shooting action initiated", "verbose", verbose)
         return self.hardware.blast_ir(verbose=verbose)
 
     def cleanup(self):
