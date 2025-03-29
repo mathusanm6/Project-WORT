@@ -2,8 +2,6 @@
 
 import threading
 
-from rasptank.hardware.hardware_main import RasptankHardware
-
 # Import from src.common
 from src.common.enum.movement import (
     CurvedTurnRate,
@@ -12,6 +10,7 @@ from src.common.enum.movement import (
     TurnDirection,
     TurnType,
 )
+from src.rasptank.hardware.hardware_main import RasptankHardware
 
 # Import from src.rasptank
 from src.rasptank.movement.controller.base import BaseMovementController

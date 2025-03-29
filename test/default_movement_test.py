@@ -7,9 +7,6 @@ It directly interacts with the hardware to control the movement of the Rasptank.
 import logging
 import time
 
-# Import from src.rasptank
-from rasptank.hardware.hardware_main import RasptankHardware
-
 # Import from src.common
 from src.common.enum.movement import (
     CurvedTurnRate,
@@ -18,6 +15,9 @@ from src.common.enum.movement import (
     TurnDirection,
     TurnType,
 )
+
+# Import from src.rasptank
+from src.rasptank.hardware.hardware_main import RasptankHardware
 from src.rasptank.movement.controller.default import DefaultMovementController
 
 
