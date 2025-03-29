@@ -30,8 +30,8 @@ from src.common.mqtt.topics import (
     SHOTOUT_TOPIC,
 )
 
-# from src.rasptank.movement.controller.mqtt import MQTTMovementController
-# from src.rasptank.movement.movement_factory import MovementControllerType, MovementFactory
+from src.rasptank.hardware.hardware_main import RasptankHardware
+from src.rasptank.movement.controller.mqtt import MQTTMovementController
 
 # Configure logging
 logging.basicConfig(
@@ -45,6 +45,7 @@ movement_controller = None
 shoot_controller = None
 camera_controller = None
 running = True
+rasptank_hardware = None
 
 # Global variables for ongoing game
 team = None
@@ -200,7 +201,7 @@ def on_flag_area():
     global rasptank_hardware, mqtt_client, flag, capturing, tank_id
 
     # Track whether the tank is currently on the zone
-    is_on_zone = True  # rasptank_hardware.is_on_top_of_capture_zone()
+    is_on_zone = rasptank_hardware.is_on_top_of_capture_zone()
 
     try:
         if is_on_zone:
@@ -240,17 +241,17 @@ def handle_flag(client, topic, payload, qos, retain):
                 payload="capturing_flag;captured",
                 qos=1,
             )
-            # rasptank_hardware.led_strip.capturing_animation()
+            rasptank_hardware.led_strip.capturing_animation()
         elif msg == "FLAG_CATCHED":
             flag = True
             capturing = False
-            # rasptank_hardware.led_strip.flag_possessed()
+            rasptank_hardware.led_strip.flag_possessed()
         elif msg == "FLAG_LOST":
             flag = False
             # Flag not possessed animation ?
         elif msg == "ABORT_CATCHING_SHOT" or msg == "ABORT_CATCHING_EXIT":
             capturing = False
-            # rasptank_hardware.led_strip.stop_animations()
+            rasptank_hardware.led_strip.stop_animations()
         elif msg == "ALREADY_GOT" or msg == "NOT_ONBASE":
             client.publish(STATUS_TOPIC, "Cannot catch flag...", qos=0)
         elif msg == "WIN":
@@ -331,8 +332,8 @@ def handle_qr(client, topic, payload, qos, retain):
         msg = payload
         if msg in ["SCAN_SUCCESSFUL", "SCAN_FAILED", "FLAG_DEPOSITED", "NO_FLAG"]:
             client.publish(STATUS_TOPIC, msg, qos=0)
-            # if msg == "FLAG_DEPOSITED":
-            # rasptank_hardware.led_strip.scored_animation()
+            if msg == "FLAG_DEPOSITED":
+                rasptank_hardware.led_strip.scored_animation()
         else:
             print(f"Unknown message from server's on topic {topic}, msg= {msg}")
     except Exception as e:
@@ -436,20 +437,16 @@ def main():
         # Set up handler for shoot commands
         mqtt_client.subscribe(topic=SHOOT_COMMAND_TOPIC, qos=0, callback=handle_shoot_command)
 
-        # Set up handler for camera commands
-        mqtt_client.subscribe(topic=CAMERA_COMMAND_TOPIC, qos=0, callback=handle_camera_command)
-
         # Initialize MQTT Movement Controller
         logger.info("Initializing MQTT Movement Controller")
 
-        """
+        rasptank_hardware = RasptankHardware(hw_logger=logger)
         movement_controller = MQTTMovementController(
             hardware=rasptank_hardware,
             mqtt_client=mqtt_client,
             command_topic=MOVEMENT_COMMAND_TOPIC,
             state_topic=MOVEMENT_STATE_TOPIC,
         )
-        """
 
         # Initialize Action Controller
         logger.info("Initializing Action Controller")
@@ -458,13 +455,12 @@ def main():
         # IR Receiver setup
         logger.info("Setting up IR receiver")
 
-        """
         if not rasptank_hardware.ir_receiver.setup_ir_receiver(
             client=mqtt_client, led_command_queue=rasptank_hardware.get_led_command_queue()
         ):
             logger.error("IR receiver setup failed")
             return 1
-        """
+
         time.sleep(0.2)
 
         # MQTT Subscriptions, tank command topic
@@ -505,14 +501,14 @@ def main():
             on_flag_area()
 
             try:
-                """command = rasptank_hardware.led_command_queue.get(timeout=0.1)
+                command = rasptank_hardware.led_command_queue.get(timeout=0.1)
                 # Shot received
                 if command == "hit":
                     logger.info("Hit event processed in main loop")
                     rasptank_hardware.led_strip.hit_animation()
                     mqtt_client.publish(
                         topic=SHOTIN_TOPIC(tank_id), payload="SHOT_BY " + command, qos=1
-                    )"""
+                    )
                 pass
             except Empty:
                 pass  # Normal condition, no commands in queue
