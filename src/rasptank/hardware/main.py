@@ -48,7 +48,8 @@ class RasptankHardware:
         self.logger.debugw("Motors initialized")
 
         # Initialize LED strip
-        self.led_strip = RasptankLedStrip()
+        led_strip_logger = hw_logger.with_component("LedStrip")
+        self.led_strip = RasptankLedStrip(led_strip_logger)
         self.led_command_queue = Queue()
         self.logger.debugw("LED strip initialized")
 
