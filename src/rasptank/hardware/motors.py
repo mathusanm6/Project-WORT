@@ -4,7 +4,7 @@ import logging
 import time
 from enum import Enum
 
-import RPi.GPIO as GPIO
+from RPi import GPIO
 
 
 class Direction(Enum):

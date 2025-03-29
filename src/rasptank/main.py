@@ -102,7 +102,7 @@ def handle_shoot_command(client, topic, payload, qos, retain):
             logger.error("Action controller not initialized")
             return
 
-        success = action_controller.shoot(verbose=(logger.level == logging.INFO))
+        success = action_controller.shoot(verbose=False)
 
         if success:
             logger.info("IR blast successfully sent")

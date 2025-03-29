@@ -3,7 +3,7 @@
 import logging
 from queue import Queue
 
-import RPi.GPIO as GPIO
+from RPi import GPIO
 
 # Import from src.common
 from src.common.enum.movement import (
