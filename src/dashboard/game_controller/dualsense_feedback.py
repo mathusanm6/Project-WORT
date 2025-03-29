@@ -3,7 +3,6 @@ DualSense Feedback Extension Module with improved rumble control
 Adds rumble and LED support to the DualSense controller integration.
 """
 
-import logging
 import threading
 import time
 from typing import Any
@@ -17,14 +16,17 @@ try:
 except ImportError:
     SDL2_AVAILABLE = False
 
-logger = logging.getLogger(__name__)
+from src.common.logging.logger_api import Logger
 
 
 class DualSenseFeedback:
     """Class to add rumble and LED functionality to DualSense controller."""
 
-    def __init__(self):
+    def __init__(self, dualsense_feedback_logger: Logger):
         """Initialize the DualSense feedback controller."""
+        self.logger = dualsense_feedback_logger
+        self.logger.infow("Initializing DualSense feedback controller")
+
         self.sdl_controller = None
         self.joystick = None
         self.haptic = None
@@ -38,7 +40,7 @@ class DualSenseFeedback:
         if SDL2_AVAILABLE:
             self._initialize_sdl()
         else:
-            logger.warning("SDL2 not available - LED and rumble features disabled")
+            self.logger.warnw("SDL2 not available, DualSense feedback features will be disabled")
 
     def _initialize_sdl(self):
         """Initialize SDL2 for DualSense feedback features."""
@@ -46,13 +48,13 @@ class DualSenseFeedback:
             # Initialize SDL2 with required subsystems
             if sdl2.SDL_Init(sdl2.SDL_INIT_GAMECONTROLLER | sdl2.SDL_INIT_HAPTIC) != 0:
                 error = sdl2.SDL_GetError().decode("utf-8")
-                logger.error(f"SDL2 initialization failed: {error}")
+                self.logger.errorw("SDL2 initialization error", "error", error)
                 return False
 
             # Look for DualSense controller
             num_joysticks = sdl2.SDL_NumJoysticks()
             if num_joysticks == 0:
-                logger.warning("No controllers detected for SDL2")
+                self.logger.warnw("No controllers detected for SDL2")
                 sdl2.SDL_Quit()
                 return False
 
@@ -78,21 +80,23 @@ class DualSenseFeedback:
                         self.haptic = sdl2.SDL_HapticOpenFromJoystick(joystick)
 
                         self.initialized = True
-                        logger.info(f"SDL2 initialized for DualSense feedback: {name}")
+                        self.logger.infow(
+                            f"SDL2 initialized for DualSense feedback", "controller_name", name
+                        )
                         return True
                     else:
                         # Close if not a DualSense
                         sdl2.SDL_GameControllerClose(temp_controller)
                 except Exception as e:
-                    logger.error(f"Error determining controller name: {e}")
+                    self.logger.errorw("Error determining controller name", "error", str(e))
                     sdl2.SDL_GameControllerClose(temp_controller)
 
-            logger.warning("No DualSense controller found for SDL2")
+            self.logger.warnw("No DualSense controller found for SDL2")
             sdl2.SDL_Quit()
             return False
 
         except Exception as e:
-            logger.error(f"Error initializing SDL2: {e}")
+            self.logger.errorw("Error initializing SDL2", "error", str(e))
             return False
 
     def set_led_color(self, r: int, g: int, b: int) -> bool:
@@ -111,7 +115,7 @@ class DualSenseFeedback:
             result = sdl2.SDL_GameControllerSetLED(self.sdl_controller, r, g, b)
             return result == 0
         except AttributeError:
-            logger.warning("LED control not supported in this SDL2 version")
+            self.logger.warnw("LED control not supported in this SDL2 version")
             return False
 
     def set_rumble(self, low_freq: int = 0, high_freq: int = 0, duration_ms: int = 0) -> bool:
@@ -168,7 +172,7 @@ class DualSenseFeedback:
             # Fall back to haptic if available
             if self.haptic:
                 return self._set_haptic_rumble(low_freq, high_freq, duration_ms)
-            logger.warning("Rumble not supported")
+            self.logger.warnw("Rumble not supported")
             return False
 
     def _set_haptic_rumble(self, low_freq: int, high_freq: int, duration_ms: int) -> bool:
@@ -226,7 +230,7 @@ class DualSenseFeedback:
 
             return False
         except Exception as e:
-            logger.error(f"Error setting haptic rumble: {e}")
+            self.logger.errorw("Error setting haptic rumble", "error", str(e))
             return False
 
     def pulse_rumble(

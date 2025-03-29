@@ -4,11 +4,11 @@ This module handles reading DualSense controller inputs and reporting raw inputs
 via callbacks.
 """
 
-import logging
 from typing import Callable, Dict, Optional
 
 # Import from src.common
 from src.common.constants.controller import JOYSTICK_DEAD_ZONE
+from src.common.logging.logger_api import Logger
 
 # Import from src.dashboard
 from src.dashboard.game_controller.controller_base import BaseController
@@ -22,9 +22,6 @@ from src.dashboard.game_controller.dualsense_mapping import (
     get_button_name,
 )
 
-# Configure logging
-logger = logging.getLogger(__name__)
-
 
 class DualSenseController(BaseController):
     """PlayStation 5 DualSense controller interface using pygame.
@@ -33,6 +30,7 @@ class DualSenseController(BaseController):
 
     def __init__(
         self,
+        dualsense_logger: Logger,
         on_button_event: Optional[Callable] = None,
         on_joystick_event: Optional[Callable] = None,
         on_trigger_event: Optional[Callable] = None,
@@ -53,6 +51,8 @@ class DualSenseController(BaseController):
             enable_feedback: Whether to enable LED and rumble feedback
         """
         super().__init__()
+
+        self.logger = dualsense_logger
 
         # Initialize callbacks
         self.on_button_event = on_button_event
@@ -77,15 +77,21 @@ class DualSenseController(BaseController):
 
         if enable_feedback:
             try:
-                self.feedback = DualSenseFeedback()
-                self.feedback_collection = DualsenseFeedbackCollection(self.feedback)
+                dualsense_feedback_logger = dualsense_logger.with_component("feedback")
+                self.feedback = DualSenseFeedback(dualsense_feedback_logger)
+                dualsense_feedback_collection_logger = dualsense_logger.with_component(
+                    "feedback_collection"
+                )
+                self.feedback_collection = DualsenseFeedbackCollection(
+                    dualsense_feedback_collection_logger, self.feedback
+                )
                 self.has_feedback = self.feedback.initialized
                 if self.has_feedback:
-                    logger.info("DualSense LED and rumble feedback enabled")
+                    self.logger.infow("DualSense feedback initialized successfully")
                 else:
-                    logger.warning("DualSense feedback initialization failed")
+                    self.logger.warnw("DualSense feedback not initialized")
             except Exception as e:
-                logger.error(f"Error initializing DualSense feedback: {e}")
+                self.logger.errorw("Error initializing DualSense feedback", "error", str(e))
                 self.has_feedback = False
 
     def _init_controller_states(self):
@@ -169,7 +175,7 @@ class DualSenseController(BaseController):
                     pass  # Hat might not be available on this controller
 
         except Exception as e:
-            logger.error(f"Error reading controller state: {e}")
+            self.logger.errorw("Error reading controller state", "error", str(e))
 
     def _handle_button(self, button_id, pressed):
         """Handle raw button press/release events.
@@ -189,7 +195,7 @@ class DualSenseController(BaseController):
                 if self.on_button_event:
                     self.on_button_event(button_name, pressed)
 
-                logger.debug(f"Button event: {button_name} {'pressed' if pressed else 'released'}")
+                self.logger.debugw(f"Button event", "button", button_name, "pressed", pressed)
 
         # Check if this is a D-pad button if we're using button mode for D-pad
         elif DPAD_TYPE == "buttons":
@@ -201,7 +207,7 @@ class DualSenseController(BaseController):
                     if self.on_dpad_event:
                         self.on_dpad_event(direction, pressed)
 
-                    logger.debug(f"D-pad event: {direction} {'pressed' if pressed else 'released'}")
+                    self.logger.debugw(f"D-pad event", "direction", direction, "pressed", pressed)
                     break
 
     def _handle_axis(self, axis_id, value):
@@ -327,7 +333,7 @@ class DualSenseController(BaseController):
         if not self.has_feedback:
             return False
 
-        return self.feedback.update_for_battery(battery_level)
+        return self.feedback_collection.update_for_battery(battery_level)
 
     def set_led_color(self, r: int, g: int, b: int) -> bool:
         """Set the controller LED color.
@@ -366,24 +372,24 @@ class DualSenseController(BaseController):
 
     def cleanup(self):
         """Clean up resources."""
-        logger.info("Cleaning up controller resources")
+        self.logger.infow("Cleaning up controller resources")
 
         # Stop rumble and clean up feedback resources
         if self.has_feedback and self.feedback:
             try:
-                logger.info("Cleaning up DualSense feedback resources")
+                self.logger.infow("Cleaning up DualSense feedback resources")
                 self.feedback.stop_rumble()
                 self.feedback.cleanup()
             except Exception as e:
-                logger.error(f"Error cleaning up DualSense feedback: {e}")
+                self.logger.errorw("Error cleaning up DualSense feedback", "error", str(e))
 
         self.stop()
 
         # Close pygame joystick
         if self.joystick:
             try:
-                logger.info("Closing controller")
+                self.logger.infow("Closing controller")
                 self.joystick.quit()
                 self.controller_state["is_connected"] = False
             except Exception as e:
-                logger.error(f"Error closing controller: {e}")
+                self.logger.errorw("Error closing controller", "error", str(e))

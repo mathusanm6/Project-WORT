@@ -15,21 +15,28 @@ from src.common.enum.movement import (
     TurnDirection,
     TurnType,
 )
+from src.common.logging.logger_api import Logger
 
 # Import from src.dashboard
 from src.dashboard.game_controller.dualsense_feedback import DualSenseFeedback
 
 
 class DualsenseFeedbackCollection:
-    def __init__(self, feedback: DualSenseFeedback):
+    def __init__(self, dualsense_feedback_collection_logger: Logger, feedback: DualSenseFeedback):
+        self.logger = dualsense_feedback_collection_logger
+        self.logger.infow("Initializing Dualsense feedback collection")
+
         self.feedback = feedback
         self.is_flag_capturing = False
 
+        self.logger.infow("Dualsense feedback collection initialized")
+
     def on_speed_out_of_bound(self, r: int, g: int, b: int) -> None:
         """
+        Provide feedback when speed is out of bounds.
 
         Args:
-            color: RGB color tuple (0-255)
+            r, g, b: RGB color values (0-255)
         """
         for _ in range(3):
             self.feedback.set_rumble(65535, 65535, 200)
@@ -42,9 +49,10 @@ class DualsenseFeedbackCollection:
 
     def on_speed_change(self, r: int, g: int, b: int) -> None:
         """
+        Provide feedback when speed changes.
 
         Args:
-            color: RGB color tuple (0-255)
+            r, g, b: RGB color values (0-255)
         """
         self.feedback.set_led_color(r, g, b)
         self.feedback.set_rumble(1500, 1500, 200)
@@ -263,7 +271,7 @@ class DualsenseFeedbackCollection:
                 time.sleep(0.04)  # Slightly faster update rate
 
         except Exception as e:
-            print(f"Rumble error: {e}")
+            self.logger.errorw("Rumble error", "error", str(e))
         finally:
             # Ensure rumble is stopped when thread ends
             self.feedback.set_rumble(0, 0, 0)

@@ -3,22 +3,22 @@ Base controller module providing generic game controller interface logic.
 This module handles the common functionality for all game controllers.
 """
 
-import logging
 import threading
 import time
 from typing import Dict
 
 import pygame
 
-# Configure logging
-logger = logging.getLogger(__name__)
+from src.common.logging.logger_api import Logger
 
 
 class BaseController:
     """Base class for game controllers using pygame."""
 
-    def __init__(self):
+    def __init__(self, base_controller_logger: Logger):
         """Initialize base controller state and resources."""
+        self.logger = base_controller_logger
+        self.logger.infow("Initializing base controller")
         # Initialize controller state
         self.controller_state = {"is_connected": False}
 
@@ -36,6 +36,8 @@ class BaseController:
         self.polling_thread = None
         self.stop_event = threading.Event()
 
+        self.logger.infow("Base controller initialized")
+
     def setup(self, max_retries=3) -> bool:
         """Initialize and set up the controller using pygame.
 
@@ -47,7 +49,9 @@ class BaseController:
         """
         for attempt in range(max_retries):
             try:
-                logger.info(f"Initializing controller (attempt {attempt+1}/{max_retries})")
+                self.logger.infow(
+                    "Initializing controller", "attempt", attempt + 1, "max_retries", max_retries
+                )
 
                 # Initialize pygame if not already done
                 if not pygame.get_init():
@@ -60,7 +64,7 @@ class BaseController:
                 # Check if any joystick is connected
                 joystick_count = pygame.joystick.get_count()
                 if joystick_count == 0:
-                    logger.warning("No joysticks found. Please connect a controller.")
+                    self.logger.warnw("No joysticks found. Please connect a controller.")
                     time.sleep(1)
                     continue
 
@@ -70,28 +74,33 @@ class BaseController:
 
                 # Log controller information
                 controller_name = self.joystick.get_name()
-                logger.info(f"Connected to controller: {controller_name}")
-                logger.info(f"Number of axes: {self.joystick.get_numaxes()}")
-                logger.info(f"Number of buttons: {self.joystick.get_numbuttons()}")
+                self.logger.infow("Connected to controller", "controller_name", controller_name)
+                self.logger.infow(
+                    "Controller info",
+                    "num_axes",
+                    self.joystick.get_numaxes(),
+                    "num_buttons",
+                    self.joystick.get_numbuttons(),
+                )
 
                 try:
-                    logger.info(f"Number of hats: {self.joystick.get_numhats()}")
+                    self.logger.infow("Hat info", "num_hats", self.joystick.get_numhats())
                 except:
-                    logger.info("Hat detection not supported")
+                    self.logger.infow("Hat detection not supported")
 
                 # Initialize controller states
                 self._init_controller_states()
 
                 self.controller_state["is_connected"] = True
-                logger.info("Controller initialized successfully")
+                self.logger.infow("Controller initialized successfully")
 
                 return True
 
             except Exception as e:
-                logger.error(f"Error initializing controller: {e}")
+                self.logger.errorw("Error initializing controller", "error", str(e))
                 time.sleep(1)  # Short delay before retry
 
-        logger.warning("Could not initialize controller after multiple attempts")
+        self.logger.warnw("Could not initialize controller after multiple attempts")
         return False
 
     def _init_controller_states(self):
@@ -127,7 +136,7 @@ class BaseController:
 
         if not self.controller_state["is_connected"]:
             if not self.setup():
-                logger.error("Failed to start controller: No controller connected")
+                self.logger.errorw("Failed to start controller: No controller connected")
                 return False
 
         # Start polling
@@ -136,7 +145,7 @@ class BaseController:
             self.polling_thread = threading.Thread(target=self._polling_loop)
             self.polling_thread.daemon = True
             self.polling_thread.start()
-            logger.info("Controller polling thread started")
+            self.logger.infow("Controller polling thread started")
 
         return True
 
@@ -159,15 +168,15 @@ class BaseController:
             self._read_controller_state()
 
         except pygame.error as e:
-            logger.error(f"Pygame error during event processing: {e}")
+            self.logger.errorw("Pygame error during event processing", "error", str(e))
             # If we lost connection to the controller, try to recover
             if "Invalid joystick device number" in str(e):
                 self.controller_state["is_connected"] = False
-                logger.warning("Controller disconnected. Attempting to reconnect...")
+                self.logger.warnw("Controller disconnected. Attempting to reconnect...")
                 time.sleep(0.5)
                 self.setup(max_retries=1)
         except Exception as e:
-            logger.error(f"Error processing controller events: {e}")
+            self.logger.errorw("Error processing controller events", "error", str(e))
 
     def _read_controller_state(self):
         """
@@ -194,15 +203,15 @@ class BaseController:
 
     def cleanup(self):
         """Clean up resources."""
-        logger.info("Cleaning up controller resources")
+        self.logger.infow("Cleaning up controller resources")
 
         self.stop()
 
         # Close pygame joystick
         if self.joystick:
             try:
-                logger.info("Closing controller")
+                self.logger.infow("Closing controller")
                 self.joystick.quit()
                 self.controller_state["is_connected"] = False
             except Exception as e:
-                logger.error(f"Error closing controller: {e}")
+                self.logger.errorw("Error closing controller", "error", str(e))
