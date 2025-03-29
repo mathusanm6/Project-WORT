@@ -4,8 +4,8 @@ The Action class is responsible for handling the actions of the Rasptank
 such as shooting.
 """
 
-from rasptank.hardware.hardware_main import RasptankHardware
 from src.common.logging.logger_api import Logger
+from src.rasptank.hardware.hardware_main import RasptankHardware
 
 
 class ActionController:
