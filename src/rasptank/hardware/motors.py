@@ -204,9 +204,13 @@ class RasptankMotors:
             if self.pwm_A:
                 self.pwm_A.stop()
                 self.logger.debugw("PWM A stopped")
+                del self.pwm_A
+                self.logger.debugw("PWM A deleted")
             if self.pwm_B:
                 self.pwm_B.stop()
                 self.logger.debugw("PWM B stopped")
+                del self.pwm_B
+                self.logger.debugw("PWM B deleted")
         except Exception as e:
             self.logger.errorw("Error stopping PWM", "error", str(e), exc_info=True)
 
