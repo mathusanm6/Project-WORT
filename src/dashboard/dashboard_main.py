@@ -33,18 +33,18 @@ from src.common.mqtt.client import MQTTClient
 from src.dashboard.controller_adapter import ControllerAdapter
 from src.dashboard.dualsense.controller import DualSenseController
 
+# Import the Pygame Dashboard (create this file in src/dashboard/pygame_dashboard.py)
+from src.dashboard.pygame_dashboard import RasptankPygameDashboard
+
 # Global variables
 mqtt_client = None
 dualsense_controller = None
 movement_controller = None
+pygame_dashboard = None
 running = True
 tank_status = {"connected": False, "battery": 0, "last_update": 0}
 current_speed_mode = None
 logger = None
-
-# MQTT Topics
-CAMERA_COMMAND_TOPIC = "rasptank/camera/command"
-ACTION_COMMAND_TOPIC = "rasptank/action/command"
 
 
 def create_logger(log_level_str):
@@ -264,7 +264,6 @@ def handle_game_event(client, topic, payload, qos, retain):
             # Hit by opponent
             shooter = parts[1] if len(parts) > 1 else "Unknown"
             logger.infow("Hit by IR shot", "shooter", shooter)
-
             dualsense_controller.feedback_collection.on_hit_by_shot()
 
         elif event_type == "scanning_qr":
@@ -287,6 +286,7 @@ def handle_game_event(client, topic, payload, qos, retain):
         )
 
 
+# This function is kept for backwards compatibility but is not used when GUI is available
 def print_dashboard():
     """Print a simple text-based dashboard to the console."""
     global tank_status, dualsense_controller, movement_controller
@@ -443,13 +443,18 @@ def parse_arguments():
         "--test-controller", action="store_true", help="Run controller button mapping test mode"
     )
 
+    # GUI options
+    parser.add_argument(
+        "--no-gui", action="store_true", help="Disable GUI dashboard and use console only"
+    )
+
     return parser.parse_args()
 
 
 @log_function_call()
 def main():
     """Main entry point."""
-    global mqtt_client, dualsense_controller, movement_controller, running, logger
+    global mqtt_client, dualsense_controller, movement_controller, running, logger, pygame_dashboard
 
     # Parse command line arguments
     args = parse_arguments()
@@ -472,6 +477,11 @@ def main():
     def cleanup_resources():
         """Clean up resources properly before exit."""
         controller_logger.infow("Cleaning up resources")
+
+        # Stop the pygame dashboard
+        if pygame_dashboard:
+            controller_logger.debugw("Stopping pygame dashboard")
+            pygame_dashboard.close()
 
         if movement_controller:
             controller_logger.debugw("Stopping movement controller")
@@ -508,6 +518,12 @@ def main():
         pygame.init()
         pygame.joystick.init()
 
+        # Initialize the pygame dashboard (if not disabled)
+        if not args.no_gui:
+            controller_logger.infow("Initializing Pygame dashboard")
+            pygame_dashboard = RasptankPygameDashboard()
+            controller_logger.infow("Pygame dashboard initialized")
+
         # Initialize DualSense controller first
         if not args.no_controller:
             controller_logger.infow("Initializing DualSense controller")
@@ -515,7 +531,9 @@ def main():
             enable_feedback = not args.no_feedback
 
             # Initialize without callbacks - the movement adapter will handle these
-            dualsense_controller = DualSenseController(dualsense_controller_logger, enable_feedback)
+            dualsense_controller = DualSenseController(
+                dualsense_controller_logger, enable_feedback=enable_feedback
+            )
 
             if not dualsense_controller.setup():
                 controller_logger.errorw("Failed to initialize DualSense controller")
@@ -599,11 +617,6 @@ def main():
                 pygame.event.pump()
                 dualsense_controller._process_events()
 
-                # Process any pygame window events
-                for event in pygame.event.get():
-                    if event.type == pygame.QUIT:
-                        running = False
-
             # Try to connect controller if it's not connected (but not too frequently)
             if (
                 dualsense_controller
@@ -627,8 +640,29 @@ def main():
 
             # Update the dashboard periodically
             if current_time - last_dashboard_update >= dashboard_update_interval:
-                print_dashboard()
+                if pygame_dashboard and pygame_dashboard.running:
+                    # Update dashboard data
+                    pygame_dashboard.update_tank_status(tank_status)
+
+                    if dualsense_controller:
+                        pygame_dashboard.update_controller_status(dualsense_controller.get_status())
+
+                    if movement_controller:
+                        pygame_dashboard.update_movement_status(movement_controller.get_status())
+
+                    # Update the dashboard display (runs in main thread)
+                    pygame_dashboard.update()
+                else:
+                    if args.no_gui:
+                        # Print dashboard to console if GUI is disabled
+                        print_dashboard()
+
                 last_dashboard_update = current_time
+
+            # Process any pygame window events - moved to main loop
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
 
             # Sleep to avoid busy waiting
             time.sleep(0.005)  # 5ms sleep
