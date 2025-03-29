@@ -44,11 +44,6 @@ class InfraEmitter:
         self.logger.debugw("Blasting IR signal", "verbose", verbose, "node_id", uuid.getnode())
         return IRBlast(uuid.getnode(), "LASER", verbose=verbose)
 
-    def cleanup(self):
-        """Clean up the IR emitter."""
-        GPIO.cleanup(IrPins.EMITTER.value)
-        self.logger.infow("IR emitter GPIO cleanup complete", "pin", IrPins.EMITTER.value)
-
 
 class InfraReceiver:
     """Class for handling IR receiver events."""
@@ -138,7 +133,5 @@ class InfraReceiver:
         try:
             # Remove event detection
             GPIO.remove_event_detect(IrPins.RECEIVER.value)
-            GPIO.cleanup(IrPins.RECEIVER.value)
-            self.logger.infow("IR receiver GPIO cleanup complete", "pin", IrPins.RECEIVER.value)
         except Exception as e:
             self.logger.errorw("Error cleaning up IR receiver", "error", str(e), exc_info=True)
