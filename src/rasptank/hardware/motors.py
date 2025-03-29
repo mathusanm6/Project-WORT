@@ -6,7 +6,7 @@ from enum import Enum
 from RPi import GPIO
 
 from src.common.logging.decorators import log_function_call
-from src.common.logging.logger_factory import LoggerFactory
+from src.common.logging.logger_api import Logger
 
 
 class Direction(Enum):
@@ -35,13 +35,10 @@ class RasptankMotors:
     KICKSTART_DUTY_CYCLE = 50
     KICKSTART_DURATION = 0.1
 
-    def __init__(self):
+    def __init__(self, motor_logger: Logger):
         """Initialize GPIO and motor controllers"""
         # Create logger
-        self.logger = LoggerFactory.create_logger(
-            logger_type="console", name="RasptankMain.hardware.motors", level="INFO"
-        )
-
+        self.logger = motor_logger
         self.logger.debugw("Initializing motors controller")
 
         self.pwm_A = None

@@ -5,7 +5,7 @@ from enum import Enum
 from RPi import GPIO
 from rpi_ws281x import Adafruit_NeoPixel, Color
 
-from src.common.logging.logger_factory import LoggerFactory
+from src.common.logging.logger_api import Logger
 from src.rasptank.hardware.led_animations import AnimationType, LedAnimationThread
 
 
@@ -24,7 +24,7 @@ class LedStripState(Enum):
 class RasptankLedStrip:
     """Class for controlling the LED strip on the Rasptank."""
 
-    def __init__(self, led_strip_logger: LoggerFactory):
+    def __init__(self, led_strip_logger: Logger):
         """Initialize the LED strip."""
         # Create logger
         self.logger = led_strip_logger

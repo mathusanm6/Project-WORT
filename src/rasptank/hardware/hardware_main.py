@@ -15,7 +15,6 @@ from src.common.logging.decorators import log_function_call
 
 # Import from src.common
 from src.common.logging.logger_api import Logger
-from src.common.logging.logger_factory import LoggerFactory
 
 # Import hardware components
 from src.rasptank.hardware.infrared import InfraEmitter, InfraReceiver
@@ -44,14 +43,13 @@ class RasptankHardware:
         self.logger.debugw("GPIO initialized", "mode", "BCM")
 
         # Initialize motor controller
-        self.motors = RasptankMotors()
-        self.logger.debugw("Motors initialized")
+        motors_logger = hw_logger.with_component("Motors")
+        self.motors = RasptankMotors(motors_logger)
 
         # Initialize LED strip
         led_strip_logger = hw_logger.with_component("LedStrip")
         self.led_strip = RasptankLedStrip(led_strip_logger)
         self.led_command_queue = Queue()
-        self.logger.debugw("LED strip initialized")
 
         # Initialize IR emitter
         ir_emitter_logger = hw_logger.with_component("InfraEmitter")
@@ -62,8 +60,8 @@ class RasptankHardware:
         self.ir_receiver = InfraReceiver(ir_receiver_logger)
 
         # Initialize tracking module
-        self.tracking_module = TrackingModule()
-        self.logger.debugw("Tracking module initialized")
+        tracking_module_logger = hw_logger.with_component("TrackingModule")
+        self.tracking_module = TrackingModule(tracking_module_logger)
 
         # For flag capture tracking
         self.capture_start_time = None
