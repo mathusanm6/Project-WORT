@@ -2,24 +2,19 @@
 """
 Rasptank Control Dashboard
 This is the main entry point for the PC-side control dashboard that
-integrates the DualSense controller and prepares for camera integration.
-
-This version uses the new modular controller structure and includes
-specific handling for macOS to ensure pygame event handling works correctly.
-It also integrates DualSense rumble and LED feedback for enhanced user experience.
+integrates the DualSense controller.
 """
 
 import argparse
-import logging
+import os
 import signal
 import sys
 import time
 
 import pygame
 
-from src.common.constants.actions import SHOOT_COMMAND_TOPIC, ActionType
-
 # Import from src.common
+from src.common.constants.actions import SHOOT_COMMAND_TOPIC, ActionType
 from src.common.constants.game import GAME_EVENT_TOPIC, STATUS_TOPIC
 from src.common.constants.movement import MOVEMENT_COMMAND_TOPIC
 from src.common.enum.movement import (
@@ -29,23 +24,14 @@ from src.common.enum.movement import (
     TurnDirection,
     TurnType,
 )
+from src.common.logging.decorators import log_function_call
+from src.common.logging.logger_api import LogLevel
+from src.common.logging.logger_factory import LoggerFactory
 from src.common.mqtt.client import MQTTClient
 
 # Import from src.dashboard
 from src.dashboard.controller_adapter import ControllerAdapter
 from src.dashboard.game_controller.dualsense_controller import DualSenseController
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
-logger = logging.getLogger("RasptankMQTT")
-
-# MQTT Topics
-CAMERA_COMMAND_TOPIC = "rasptank/camera/command"
-ACTION_COMMAND_TOPIC = "rasptank/action/command"
-
 
 # Global variables
 mqtt_client = None
@@ -54,15 +40,45 @@ movement_controller = None
 running = True
 tank_status = {"connected": False, "battery": 0, "last_update": 0}
 current_speed_mode = None
+logger = None
+
+# MQTT Topics
+CAMERA_COMMAND_TOPIC = "rasptank/camera/command"
+ACTION_COMMAND_TOPIC = "rasptank/action/command"
+
+
+def create_logger(log_level_str):
+    """Create and configure the main logger."""
+    global logger
+
+    # Convert string log level to proper LogLevel value
+    log_level = LogLevel.INFO
+    if log_level_str.upper() == "DEBUG":
+        log_level = LogLevel.DEBUG
+    elif log_level_str.upper() == "WARNING":
+        log_level = LogLevel.WARNING
+    elif log_level_str.upper() == "ERROR":
+        log_level = LogLevel.ERROR
+
+    # Create the main logger
+    logger = LoggerFactory.create_logger(
+        logger_type=os.environ.get("RASPTANK_LOGGER_TYPE", "console"),
+        name="RasptankDashboard",
+        level=log_level,
+        use_colors=True,
+    )
+
+    return logger
 
 
 def signal_handler(sig, frame):
     """Handle termination signals gracefully."""
-    global running
-    logger.info("Termination signal received, shutting down...")
+    global running, logger
+    logger.infow("Termination signal received, shutting down...", "signal", sig)
     running = False
 
 
+@log_function_call()
 def send_movement_command(
     thrust_direction: ThrustDirection,
     turn_direction: TurnDirection,
@@ -79,10 +95,10 @@ def send_movement_command(
         speed_mode (SpeedMode): Speed mode
         curved_turn_rate (CurvedTurnRate): Rate of turn for CURVE turn type (0.0 to 1.0 with 0.0 being no curve)
     """
-    global mqtt_client
+    global mqtt_client, logger
 
     if not mqtt_client or not mqtt_client.connected.is_set():
-        logger.warning("Cannot send movement command: MQTT client not connected")
+        logger.warnw("Cannot send movement command: MQTT client not connected")
         return
 
     try:
@@ -90,11 +106,24 @@ def send_movement_command(
         message = f"{thrust_direction.value};{turn_direction.value};{turn_type.value};{speed_mode.value};{curved_turn_rate.value:.2f}"
 
         # Publish the command
-        logger.debug(f"Sending movement command: {message}")
+        logger.debugw(
+            "Sending movement command",
+            "thrust",
+            thrust_direction.value,
+            "turn",
+            turn_direction.value,
+            "type",
+            turn_type.value,
+            "speed",
+            speed_mode.value,
+            "curve_rate",
+            f"{curved_turn_rate.value:.2f}",
+        )
+
         mqtt_client.publish(MOVEMENT_COMMAND_TOPIC, message, qos=0)
 
     except Exception as e:
-        logger.error(f"Error sending movement command: {e}")
+        logger.errorw("Error sending movement command", "error", str(e), exc_info=True)
 
 
 def send_action_command(action_type: ActionType):
@@ -103,10 +132,10 @@ def send_action_command(action_type: ActionType):
     Args:
         action_type (ActionType): Action
     """
-    global mqtt_client
+    global mqtt_client, logger
 
     if not mqtt_client or not mqtt_client.connected.is_set():
-        logger.warning(f"Cannot send {action_type} command: MQTT client not connected")
+        logger.warnw("Cannot send action command", "action", action_type)
         return
 
     try:
@@ -117,15 +146,17 @@ def send_action_command(action_type: ActionType):
         if action_type == ActionType.SHOOT:
             topic = SHOOT_COMMAND_TOPIC
         else:
-            logger.warning(f"Unknown action command: {action_type}")
+            logger.warnw("Unknown action command", "action", action_type)
             return
 
         # Publish the command
-        logger.debug(f"Sending {action_type} command: {message}")
+        logger.debugw("Sending action command", "action", action_type, "topic", topic)
         mqtt_client.publish(topic, message, qos=0)
 
     except Exception as e:
-        logger.error(f"Error sending {action_type} command: {e}")
+        logger.errorw(
+            "Error sending action command", "action", action_type, "error", str(e), exc_info=True
+        )
 
 
 def handle_status_update(client, topic, payload, qos, retain):
@@ -138,7 +169,7 @@ def handle_status_update(client, topic, payload, qos, retain):
         qos (int): QoS level
         retain (bool): Whether the message was retained
     """
-    global tank_status, movement_controller
+    global tank_status, movement_controller, logger
 
     try:
         # Parse the status message
@@ -156,18 +187,22 @@ def handle_status_update(client, topic, payload, qos, retain):
                 tank_status["battery"] = battery
                 tank_status["last_update"] = timestamp
 
-                logger.debug(f"Tank status updated: Battery={battery}%")
+                logger.debugw(
+                    "Tank status updated", "battery", f"{battery}%", "timestamp", timestamp
+                )
 
             elif status_type == "shot_fired":
-                logger.info("Shot fired by the tank")
+                logger.infow("Shot fired by the tank")
 
             elif status_type == "camera_moved":
-                logger.debug("Camera position updated")
+                logger.debugw("Camera position updated")
             else:
-                logger.debug(f"Received status update: {payload}")
+                logger.debugw("Received status update", "payload", payload)
 
     except Exception as e:
-        logger.error(f"Error handling status update: {e}")
+        logger.errorw(
+            "Error handling status update", "error", str(e), "payload", payload, exc_info=True
+        )
 
 
 def handle_game_event(client, topic, payload, qos, retain):
@@ -180,12 +215,15 @@ def handle_game_event(client, topic, payload, qos, retain):
         qos (int): QoS level
         retain (bool): Whether the message was retained
     """
+    global logger, dualsense_controller, current_speed_mode
+
     try:
         parts = payload.split(";")
         if len(parts) < 1:
             return
 
         event_type = parts[0]
+        logger.debugw("Game event received", "event", event_type, "payload", payload)
 
         # Only process if controller has feedback capabilities
         if (
@@ -193,11 +231,13 @@ def handle_game_event(client, topic, payload, qos, retain):
             or not hasattr(dualsense_controller, "feedback")
             or not dualsense_controller.has_feedback
         ):
+            logger.debugw("Skipping controller feedback - not available")
             return
 
         # Handle different game events with appropriate feedback
         if event_type == "entering_capture_zone":
             # Entering capture zone - blue pulsing
+            logger.debugw("Processing entering capture zone event")
             dualsense_controller.set_led_color(0, 128, 255)  # Light blue
             dualsense_controller.feedback.pulse_rumble(
                 intensity=20000, duration_sec=2, pattern_ms=500
@@ -208,6 +248,8 @@ def handle_game_event(client, topic, payload, qos, retain):
                 return
 
             capture_flag_state = parts[1]
+            logger.debugw("Flag capture event", "state", capture_flag_state)
+
             if capture_flag_state == "started":
                 if current_speed_mode:
                     dualsense_controller.feedback_collection.on_flag_capture_started(
@@ -231,11 +273,12 @@ def handle_game_event(client, topic, payload, qos, retain):
                     dualsense_controller.feedback_collection.on_flag_capture_failed(255, 255, 255)
             else:
                 # Unknown state
-                logger.warning(f"Unknown flag capture state: {capture_flag_state}")
+                logger.warnw("Unknown flag capture state", "state", capture_flag_state)
+
         elif event_type == "hit_by_ir":
             # Hit by opponent
             shooter = parts[1] if len(parts) > 1 else "Unknown"
-            logger.info(f"Hit by IR shot from {shooter}")
+            logger.infow("Hit by IR shot", "shooter", shooter)
 
             if current_speed_mode:
                 dualsense_controller.feedback_collection.on_hit_by_shot(*current_speed_mode.color)
@@ -244,18 +287,22 @@ def handle_game_event(client, topic, payload, qos, retain):
 
         elif event_type == "scanning_qr":
             # QR scanning attempt - distinctive feedback
+            logger.debugw("Processing QR scanning event")
             dualsense_controller.set_led_color(0, 255, 0)  # Green
             dualsense_controller.set_rumble(10000, 40000, 1000)  # High-frequency feedback
 
         elif event_type == "flag_returned":
             # Flag returned to base - victory feedback
+            logger.debugw("Processing flag returned event")
             dualsense_controller.set_led_color(0, 255, 255)  # Cyan
             dualsense_controller.feedback.pulse_rumble(
                 intensity=65535, duration_sec=3, pattern_ms=200
             )
 
     except Exception as e:
-        logger.error(f"Error handling game event: {e}")
+        logger.errorw(
+            "Error handling game event", "error", str(e), "payload", payload, exc_info=True
+        )
 
 
 def print_dashboard():
@@ -383,7 +430,13 @@ def parse_arguments():
     )
 
     # Logging options
-    parser.add_argument("--debug", "-d", action="store_true", help="Enable debug logging")
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Logging level (default: INFO)",
+    )
 
     parser.add_argument("--quiet", "-q", action="store_true", help="Minimize console output")
 
@@ -411,42 +464,39 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def setup_logging(debug_mode: bool, quiet_mode: bool):
-    """Configure logging based on command line arguments."""
-    root_logger = logging.getLogger()
-
-    if debug_mode:
-        root_logger.setLevel(logging.DEBUG)
-        logger.setLevel(logging.DEBUG)
-    elif quiet_mode:
-        root_logger.setLevel(logging.WARNING)
-        logger.setLevel(logging.WARNING)
-    else:
-        root_logger.setLevel(logging.INFO)
-        logger.setLevel(logging.INFO)
-
-
+@log_function_call()
 def main():
     """Main entry point."""
-    global mqtt_client, dualsense_controller, movement_controller, running
+    global mqtt_client, dualsense_controller, movement_controller, running, logger
 
     # Parse command line arguments
     args = parse_arguments()
 
     # Set up logging
-    setup_logging(args.debug, args.quiet)
+    log_level = "WARNING" if args.quiet else args.log_level
+    logger = create_logger(log_level)
+
+    # Create MQTT logger for the client
+    mqtt_logger = logger.with_component("mqtt")
 
     # Set up signal handlers
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
+    controller_logger = logger.with_component("controller")
+    controller_logger.infow("Starting Rasptank Control Dashboard")
+
     # Add a handler to ensure proper cleanup on exit
     def cleanup_resources():
         """Clean up resources properly before exit."""
+        controller_logger.infow("Cleaning up resources")
+
         if movement_controller:
+            controller_logger.debugw("Stopping movement controller")
             movement_controller.stop()
 
         if dualsense_controller:
+            controller_logger.debugw("Cleaning up controller")
             # Stop any active rumble effects
             if hasattr(dualsense_controller, "stop_rumble"):
                 dualsense_controller.stop_rumble()
@@ -457,9 +507,11 @@ def main():
             dualsense_controller.cleanup()
 
         if mqtt_client:
+            controller_logger.debugw("Disconnecting MQTT client")
             mqtt_client.disconnect()
 
         pygame.quit()
+        controller_logger.infow("Resource cleanup complete")
 
     # Register the cleanup handler
     import atexit
@@ -473,7 +525,7 @@ def main():
 
         # Initialize DualSense controller first
         if not args.no_controller:
-            logger.info("Initializing DualSense controller")
+            controller_logger.infow("Initializing DualSense controller")
             # Enable feedback unless explicitly disabled
             enable_feedback = not args.no_feedback
 
@@ -481,34 +533,40 @@ def main():
             dualsense_controller = DualSenseController(enable_feedback=enable_feedback)
 
             if not dualsense_controller.setup():
-                logger.error("Failed to initialize DualSense controller")
+                controller_logger.errorw("Failed to initialize DualSense controller")
                 # Continue anyway, we'll retry in the main loop
             else:
                 # Log feedback status
                 if dualsense_controller.has_feedback:
-                    logger.info("DualSense feedback features (LED & rumble) enabled")
+                    controller_logger.infow("DualSense feedback features (LED & rumble) enabled")
                 elif enable_feedback:
-                    logger.warning("DualSense feedback requested but not available")
+                    controller_logger.warnw("DualSense feedback requested but not available")
 
                 # Initialize movement controller with the modified adapter
-                logger.info("Initializing controller movement adapter with new control scheme")
+                controller_logger.infow(
+                    "Initializing controller movement adapter with new control scheme"
+                )
                 movement_controller = ControllerAdapter(
                     controller=dualsense_controller,
                     on_movement_command=send_movement_command,
                     on_action_command=send_action_command,
                 )
         else:
-            logger.info("DualSense controller initialization skipped")
+            controller_logger.infow("DualSense controller initialization skipped")
 
         # Initialize MQTT client
-        logger.info(f"Connecting to MQTT broker at {args.broker}:{args.port}")
+        mqtt_logger.infow("Connecting to MQTT broker", "broker", args.broker, "port", args.port)
+
         mqtt_client = MQTTClient(
-            broker_address=args.broker, broker_port=args.port, client_id=args.client_id
+            mqtt_logger=mqtt_logger,
+            broker_address=args.broker,
+            broker_port=args.port,
+            client_id=args.client_id,
         )
 
         # Connect to MQTT broker
         if not mqtt_client.connect():
-            logger.error("Failed to initiate connection to MQTT broker")
+            controller_logger.errorw("Failed to initiate connection to MQTT broker")
             if dualsense_controller:
                 dualsense_controller.cleanup()
             pygame.quit()
@@ -516,7 +574,7 @@ def main():
 
         # Wait for connection to establish
         if not mqtt_client.wait_for_connection(timeout=5.0):
-            logger.error("Failed to connect to MQTT broker within timeout")
+            controller_logger.errorw("Failed to connect to MQTT broker within timeout")
             if dualsense_controller:
                 dualsense_controller.cleanup()
             pygame.quit()
@@ -528,12 +586,16 @@ def main():
         # Subscribe to game events for controller feedback
         mqtt_client.subscribe(topic=GAME_EVENT_TOPIC, qos=0, callback=handle_game_event)
 
-        logger.info("Controller initialized and ready")
-        logger.info("Control Scheme:")
-        logger.info("- Left Stick: Forward/Backward movement (dead zone: 0.20)")
-        logger.info("- Left Stick: Left/Right turning (>0.8 = sharp, 0.2-0.8 = moderate)")
-        logger.info("- L1/R1: Speed control (Low, Medium, High)")
-        logger.info("- R2: Shoot")
+        controller_logger.infow("Controller initialized and ready")
+        controller_logger.infow(
+            "Control Scheme:",
+            "left_stick",
+            "Forward/Backward + turning",
+            "l1_r1",
+            "Speed control",
+            "r2",
+            "Shoot",
+        )
 
         # Main loop
         dashboard_update_interval = 1.0 / 24.0  # 24Hz update rate
@@ -541,7 +603,7 @@ def main():
         controller_retry_interval = 10.0  # seconds
         last_controller_retry = 0
 
-        logger.info("Running with threaded controller polling")
+        controller_logger.infow("Running with threaded controller polling")
 
         while running:
             current_time = time.time()
@@ -561,11 +623,13 @@ def main():
                 and not dualsense_controller.get_status()["connected"]
                 and current_time - last_controller_retry >= controller_retry_interval
             ):
-                logger.info("Attempting to reconnect DualSense controller...")
+                controller_logger.infow("Attempting to reconnect DualSense controller")
                 if dualsense_controller.setup(max_retries=1):  # Only try once each time
                     if movement_controller is None:
                         # Reinitialize movement controller after controller reconnection
-                        logger.info("Initializing controller movement adapter after reconnection")
+                        controller_logger.infow(
+                            "Initializing controller movement adapter after reconnection"
+                        )
                         movement_controller = ControllerAdapter(
                             controller=dualsense_controller,
                             on_movement_command=send_movement_command,
@@ -582,13 +646,13 @@ def main():
             time.sleep(0.005)  # 5ms sleep
 
     except Exception as e:
-        logger.error(f"Error in main loop: {e}", exc_info=True)
+        controller_logger.errorw("Error in main loop", "error", str(e), exc_info=True)
         return 1
     finally:
         # Most cleanup is handled by the atexit handler
         pass
 
-    logger.info("Controller shutdown complete")
+    controller_logger.infow("Controller shutdown complete")
     return 0
 
 
