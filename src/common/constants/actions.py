@@ -14,4 +14,4 @@ class ActionType(Enum):
 
 
 # MQTT Topics
-SHOOT_COMMAND_TOPIC = "rasptank/shoot/command"
+SHOOT_COMMAND_TOPIC = "rasptank/action/shoot"
