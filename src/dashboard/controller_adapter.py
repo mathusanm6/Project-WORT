@@ -5,7 +5,6 @@ This adapter converts raw controller inputs into commands
 compatible with the RaspTank hardware implementation.
 """
 
-import logging
 import math
 from typing import Any, Callable, Dict, Optional
 
@@ -23,6 +22,7 @@ from src.common.enum.movement import (
     TurnDirection,
     TurnType,
 )
+from src.common.logging.logger_api import Logger
 
 # Import from the new modular controller structure
 from src.dashboard.game_controller.dualsense_controller import DualSenseController
@@ -33,9 +33,6 @@ from src.dashboard.game_controller.events import (
     TriggerType,
 )
 
-# Configure logging
-logger = logging.getLogger(__name__)
-
 
 class ControllerAdapter:
     """
@@ -45,6 +42,7 @@ class ControllerAdapter:
 
     def __init__(
         self,
+        controller_adapter_logger: Logger,
         controller: DualSenseController,
         on_movement_command: Optional[Callable] = None,
         on_action_command: Optional[Callable] = None,
@@ -58,6 +56,9 @@ class ControllerAdapter:
             on_action_command: Callback for action commands
                 Function signature: callback(action_name)
         """
+        self.logger = controller_adapter_logger
+        self.logger.infow("Initializing RaspTank Controller Adapter")
+
         self.controller = controller
         self.on_movement_command = on_movement_command
         self.on_action_command = on_action_command
@@ -65,9 +66,9 @@ class ControllerAdapter:
         # Check if controller has feedback capabilities
         self.has_feedback = hasattr(controller, "has_feedback") and controller.has_feedback
         if self.has_feedback:
-            logger.info("DualSense feedback features enabled for movement adapter")
+            self.logger.infow("DualSense feedback features enabled for movement adapter")
         else:
-            logger.info("DualSense feedback features not available")
+            self.logger.infow("DualSense feedback features not available")
 
         # Register as handlers for the controller's callbacks
         self.controller.on_button_event = self._handle_button_event
@@ -116,9 +117,15 @@ class ControllerAdapter:
         if self.has_feedback:
             self.controller.set_led_color(*self.speed_modes[self.current_speed_mode_idx].color)
 
-        logger.info("RaspTank Controller Adapter initialized with DualSense controller")
-        logger.info(
-            f"Initial speed mode: {self.current_speed_mode_idx} (LOW - {self.speed_values[self.current_speed_mode_idx]}%)"
+        self.logger.infow("RaspTank Controller Adapter initialized with DualSense controller")
+        self.logger.infow(
+            "Initial speed mode",
+            "mode_idx",
+            self.current_speed_mode_idx,
+            "label",
+            "LOW",
+            "value",
+            self.speed_values[self.current_speed_mode_idx],
         )
 
     def _handle_button_event(self, button_name, pressed):
@@ -129,19 +136,25 @@ class ControllerAdapter:
             button_name (str): Name of the button
             pressed (bool): Whether the button is pressed
         """
-        # Print raw button event for debugging
-        logger.debug(f"Button event: {button_name} {'pressed' if pressed else 'released'}")
+        # Log raw button event for debugging
+        self.logger.debugw("Button event", "button", button_name, "pressed", pressed)
 
         # Handle speed control with L1 button (decrease speed)
         if button_name == ButtonType.L1.value and pressed:
-            # Print current speed mode for debugging
-            logger.info(f"L1 pressed. Current speed mode before: {self.current_speed_mode_idx}")
+            # Log current speed mode for debugging
+            self.logger.infow(
+                "L1 pressed", "current_speed_mode_before", self.current_speed_mode_idx
+            )
 
             # Decrease speed mode (without wrap-around)
             if self.current_speed_mode_idx > 0:
                 self.current_speed_mode_idx -= 1
-                logger.info(
-                    f"Speed decreased to mode {self.current_speed_mode_idx} ({self.speed_values[self.current_speed_mode_idx]}%)"
+                self.logger.infow(
+                    "Speed decreased",
+                    "mode",
+                    self.current_speed_mode_idx,
+                    "value",
+                    self.speed_values[self.current_speed_mode_idx],
                 )
 
                 # Update LED color based on new speed mode and rumble
@@ -160,24 +173,30 @@ class ControllerAdapter:
                     # Also update any active D-pad movements with the new speed
                     self._update_active_dpad_movements()
             else:
-                logger.info("Already at the lowest speed mode")
+                self.logger.infow("Already at the lowest speed mode")
                 if self.has_feedback:
                     self.controller.feedback_collection.on_speed_out_of_bound(
                         *self.speed_modes[self.current_speed_mode_idx].color
                     )
 
-            logger.info(f"L1 pressed. Speed mode after: {self.current_speed_mode_idx}")
+            self.logger.infow("L1 pressed", "speed_mode_after", self.current_speed_mode_idx)
 
         # Handle speed control with R1 button (increase speed)
         elif button_name == ButtonType.R1.value and pressed:
-            # Print current speed mode for debugging
-            logger.info(f"R1 pressed. Current speed mode before: {self.current_speed_mode_idx}")
+            # Log current speed mode for debugging
+            self.logger.infow(
+                "R1 pressed", "current_speed_mode_before", self.current_speed_mode_idx
+            )
 
             # Increase speed mode (without wrap-around)
             if self.current_speed_mode_idx < len(self.speed_values) - 1:
                 self.current_speed_mode_idx += 1
-                logger.info(
-                    f"Speed increased to mode {self.current_speed_mode_idx} ({self.speed_values[self.current_speed_mode_idx]}%)"
+                self.logger.infow(
+                    "Speed increased",
+                    "mode",
+                    self.current_speed_mode_idx,
+                    "value",
+                    self.speed_values[self.current_speed_mode_idx],
                 )
 
                 # Update LED color based on new speed mode and rumble
@@ -196,18 +215,18 @@ class ControllerAdapter:
                     # Also update any active D-pad movements with the new speed
                     self._update_active_dpad_movements()
             else:
-                logger.info("Already at the highest speed mode")
+                self.logger.infow("Already at the highest speed mode")
                 if self.has_feedback:
                     self.controller.feedback_collection.on_speed_out_of_bound(
                         *self.speed_modes[self.current_speed_mode_idx].color
                     )
 
-            logger.info(f"R1 pressed. Speed mode after: {self.current_speed_mode_idx}")
+            self.logger.infow("R1 pressed", "speed_mode_after", self.current_speed_mode_idx)
 
         # Shoot using the SQUARE button
         elif button_name == ButtonType.SQUARE.value and pressed:
             if self.on_action_command:
-                logger.info("Shoot command sent")
+                self.logger.infow("Shoot command sent")
                 self.on_action_command(ActionType.SHOOT)
                 if self.has_feedback:
                     self.controller.feedback_collection.on_shoot(
@@ -217,7 +236,7 @@ class ControllerAdapter:
         # Toggle pivot mode using the TRIANGLE button
         elif button_name == ButtonType.TRIANGLE.value and pressed:
             self.pivot_mode = not self.pivot_mode
-            logger.info(f"Pivot mode toggled to: {self.pivot_mode}")
+            self.logger.infow("Pivot mode toggled", "pivot_mode", self.pivot_mode)
             if self.has_feedback:
                 self.controller.feedback_collection.on_pivot_mode(
                     *self.speed_modes[self.current_speed_mode_idx].color
@@ -298,14 +317,14 @@ class ControllerAdapter:
         if trigger_name == TriggerType.R2.value:
             # R2 for forward movement
             self.r2_trigger_value = value if value > TRIGGER_THRESHOLD else 0.0
-            logger.info(
-                f"R2 trigger pressed with value: {value}, current value: {self.r2_trigger_value}"
+            self.logger.infow(
+                "R2 trigger pressed", "value", value, "current_value", self.r2_trigger_value
             )
         elif trigger_name == TriggerType.L2.value:
             # L2 for backward movement
             self.l2_trigger_value = value if value > TRIGGER_THRESHOLD else 0.0
-            logger.info(
-                f"L2 trigger pressed with value: {value}, current value: {self.l2_trigger_value}"
+            self.logger.infow(
+                "L2 trigger pressed", "value", value, "current_value", self.l2_trigger_value
             )
 
         # Process combined movement from triggers and joystick
@@ -551,8 +570,18 @@ class ControllerAdapter:
             self.on_movement_command(
                 thrust_direction, turn_direction, turn_type, speed_mode, curved_turn_rate
             )
-            logger.debug(
-                f"Movement command sent: Thrust Direction: {thrust_direction}, Turn Direction: {turn_direction}, Turn Type: {turn_type}, Speed Mode: {speed_mode}, Curved Turn Rate: {curved_turn_rate}"
+            self.logger.debugw(
+                "Movement command sent",
+                "thrust_direction",
+                thrust_direction,
+                "turn_direction",
+                turn_direction,
+                "turn_type",
+                turn_type,
+                "speed_mode",
+                speed_mode,
+                "curved_turn_rate",
+                curved_turn_rate,
             )
 
             if self.has_feedback:
@@ -585,7 +614,7 @@ class ControllerAdapter:
             CurvedTurnRate.NONE,
         )
 
-        logger.info("Movement stopped")
+        self.logger.infow("Movement stopped")
 
     def get_status(self) -> Dict[str, Any]:
         """

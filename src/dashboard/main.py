@@ -530,7 +530,8 @@ def main():
             enable_feedback = not args.no_feedback
 
             # Initialize without callbacks - the movement adapter will handle these
-            dualsense_controller = DualSenseController(enable_feedback=enable_feedback)
+            dualsense_controller_logger = controller_logger.with_component("dualsense")
+            dualsense_controller = DualSenseController(dualsense_controller_logger, enable_feedback)
 
             if not dualsense_controller.setup():
                 controller_logger.errorw("Failed to initialize DualSense controller")
