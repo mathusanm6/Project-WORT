@@ -1,6 +1,6 @@
 """
-Battery management module for Rasptank.
-This module handles battery state tracking, persistence, and status reporting.
+Battery management module for Rasptank with extreme discharge rate.
+This module forces battery to drain completely in about 5 seconds.
 """
 
 import json
@@ -30,10 +30,8 @@ class BatteryManager:
     # File to store battery status
     BATTERY_STATE_FILE = "/tmp/rasptank_battery_state.json"
 
-    # Default battery discharge rate (percentage per hour)
-    DEFAULT_DISCHARGE_RATE = 72000.0
-
-    # Default starting battery percentage if not previously saved
+    # Discharge settings
+    DRAIN_SECONDS = 5.0
     DEFAULT_BATTERY_PERCENTAGE = 100.0
 
     # Minimum time between state saves to prevent excessive disk writes
@@ -44,8 +42,7 @@ class BatteryManager:
         self.logger = logger
         self.power_source = PowerSource.WIRED
         self.battery_percentage = self.DEFAULT_BATTERY_PERCENTAGE
-        self.discharge_rate = self.DEFAULT_DISCHARGE_RATE  # % per hour
-        self.last_update_time = time.time()
+        self.start_discharge_time = None  # When we started discharging
         self.last_save_time = 0
         self._running = False
         self._thread = None
@@ -63,11 +60,13 @@ class BatteryManager:
         self._thread = threading.Thread(target=self._battery_monitor_thread, daemon=True)
         self._thread.start()
         self.logger.infow(
-            "Battery management system started",
+            "EXTREME battery management system started",
             "power_source",
             self.power_source.value,
             "battery_percentage",
             f"{self.battery_percentage:.1f}%",
+            "drain_time",
+            f"{self.DRAIN_SECONDS} seconds",
         )
 
     def stop(self):
@@ -85,8 +84,18 @@ class BatteryManager:
     def set_power_source(self, source: PowerSource):
         """Change the power source."""
         with self._lock:
+            old_source = self.power_source
             self.power_source = source
-            self.last_update_time = time.time()
+
+            # If switching to battery, record the start time
+            if source == PowerSource.BATTERY and old_source != PowerSource.BATTERY:
+                self.start_discharge_time = time.time()
+                self.logger.infow(
+                    "Starting extreme battery discharge timer",
+                    "drain_seconds",
+                    self.DRAIN_SECONDS,
+                )
+
             self._save_state()
             self.logger.infow(
                 "Power source changed",
@@ -100,7 +109,8 @@ class BatteryManager:
         """Reset battery to full charge (after battery replacement)."""
         with self._lock:
             self.battery_percentage = self.DEFAULT_BATTERY_PERCENTAGE
-            self.last_update_time = time.time()
+            if self.power_source == PowerSource.BATTERY:
+                self.start_discharge_time = time.time()
             self._save_state()
             self.logger.infow(
                 "Battery reset to full charge",
@@ -114,36 +124,74 @@ class BatteryManager:
             # If on wired power, always return 100%
             if self.power_source == PowerSource.WIRED:
                 return 100.0
+
+            # If we're on battery power, calculate percentage based on elapsed time
+            if self.start_discharge_time is not None:
+                elapsed_seconds = time.time() - self.start_discharge_time
+                percentage = max(0.0, 100.0 * (1.0 - (elapsed_seconds / self.DRAIN_SECONDS)))
+
+                # Update the stored percentage
+                self.battery_percentage = percentage
+
+                # If we've completely drained, log it
+                if percentage <= 0.0 and self.battery_percentage > 0.0:
+                    self.logger.warnw(
+                        "Battery completely drained",
+                        "elapsed_seconds",
+                        f"{elapsed_seconds:.1f}",
+                    )
+
+                return percentage
             return self.battery_percentage
 
     def _battery_monitor_thread(self):
-        """Background thread to simulate battery discharge."""
+        """Background thread to check battery status and log it."""
         while self._running:
             if self.power_source == PowerSource.BATTERY:
                 with self._lock:
-                    # Calculate time since last update
-                    current_time = time.time()
-                    elapsed_hours = (current_time - self.last_update_time) / 3600.0
+                    # Get current battery percentage (this will update it too)
+                    percentage = self.get_battery_percentage()
 
-                    # Update battery percentage
-                    discharge_amount = elapsed_hours * self.discharge_rate
-                    self.battery_percentage = max(0.0, self.battery_percentage - discharge_amount)
-                    self.last_update_time = current_time
+                    # Log progress at certain thresholds
+                    if percentage <= 80.0 and percentage > 79.0:
+                        self.logger.infow(
+                            "Battery at 80%",
+                            "elapsed_seconds",
+                            f"{time.time() - self.start_discharge_time:.1f}",
+                        )
+                    elif percentage <= 50.0 and percentage > 49.0:
+                        self.logger.infow(
+                            "Battery at 50%",
+                            "elapsed_seconds",
+                            f"{time.time() - self.start_discharge_time:.1f}",
+                        )
+                    elif percentage <= 20.0 and percentage > 19.0:
+                        self.logger.warnw(
+                            "Battery at 20%",
+                            "elapsed_seconds",
+                            f"{time.time() - self.start_discharge_time:.1f}",
+                        )
+                    elif percentage <= 10.0 and percentage > 9.0:
+                        self.logger.warnw(
+                            "Battery at 10%",
+                            "elapsed_seconds",
+                            f"{time.time() - self.start_discharge_time:.1f}",
+                        )
+                    elif percentage <= 0.0:
+                        # Just in case we haven't logged it yet
+                        self.logger.warnw(
+                            "Battery depleted",
+                            "elapsed_seconds",
+                            f"{time.time() - self.start_discharge_time:.1f}",
+                        )
 
                     # Periodically save state to disk
+                    current_time = time.time()
                     if current_time - self.last_save_time > self.SAVE_THROTTLE_SECONDS:
                         self._save_state()
 
-                    # Log if battery is getting low
-                    if self.battery_percentage < 20.0:
-                        self.logger.warnw(
-                            "Battery is running low",
-                            "battery_percentage",
-                            f"{self.battery_percentage:.1f}%",
-                        )
-
-            # Check every 10 seconds
-            time.sleep(10.0)
+            # Check every 0.5 seconds for more responsive updates
+            time.sleep(0.5)
 
     def _save_state(self):
         """Save battery state to disk."""
@@ -151,8 +199,7 @@ class BatteryManager:
             state = {
                 "power_source": self.power_source.value,
                 "battery_percentage": self.battery_percentage,
-                "last_update_time": self.last_update_time,
-                "discharge_rate": self.discharge_rate,
+                "start_discharge_time": self.start_discharge_time,
             }
 
             with open(self.BATTERY_STATE_FILE, "w") as f:
@@ -179,8 +226,11 @@ class BatteryManager:
             self.battery_percentage = float(
                 state.get("battery_percentage", self.DEFAULT_BATTERY_PERCENTAGE)
             )
-            self.last_update_time = float(state.get("last_update_time", time.time()))
-            self.discharge_rate = float(state.get("discharge_rate", self.DEFAULT_DISCHARGE_RATE))
+
+            # Don't restore the discharge start time - we want to start fresh
+            self.start_discharge_time = (
+                None if self.power_source == PowerSource.WIRED else time.time()
+            )
 
             self.logger.infow(
                 "Loaded saved battery state",
@@ -205,13 +255,13 @@ def setup_power_source_prompt(logger):
     """Prompt user to select power source at startup."""
     print("\n===== Rasptank Power Source Configuration =====")
     print("Is the Rasptank running on batteries or connected to power?")
-    print("1. Running on batteries")
+    print("1. Running on batteries (EXTREME 5-second discharge)")
     print("2. Connected to power (default)")
 
     try:
         choice = input("Enter choice (1/2) [2]: ").strip()
         if choice == "1":
-            logger.infow("User selected battery power")
+            logger.infow("User selected battery power with extreme discharge")
             return PowerSource.BATTERY
         else:
             logger.infow("User selected wired power")
