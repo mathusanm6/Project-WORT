@@ -37,7 +37,7 @@ class MQTTClient:
         """
         self.logger = mqtt_logger
 
-        # self.logger.info("Initializing MQTT client", "broker", str(broker_address), "port", str(broker_port))
+        # self.logger.infow("Initializing MQTT client", "broker", str(broker_address), "port", str(broker_port))
 
         # MQTT configuration
         self.broker_address = broker_address
@@ -61,7 +61,7 @@ class MQTTClient:
         # Automatic reconnection
         self.client.reconnect_delay_set(min_delay=1, max_delay=reconnect_delay)
 
-        self.logger.debug(
+        self.logger.debugw(
             "MQTT client initialized",
             "client_id",
             self.client_id,
@@ -80,7 +80,7 @@ class MQTTClient:
         """
         try:
             """
-            self.logger.info(
+            self.logger.infow(
                 "Connecting to MQTT broker", "broker", str(self.broker_address), "port", str(self.broker_port)
             )"""
 
@@ -98,7 +98,7 @@ class MQTTClient:
     def disconnect(self):
         """Disconnect from the MQTT broker."""
         try:
-            self.logger.info("Disconnecting from MQTT broker")
+            self.logger.infow("Disconnecting from MQTT broker")
             self.client.loop_stop()
             self.client.disconnect()
             self.connected.clear()
@@ -118,7 +118,7 @@ class MQTTClient:
         """
         result = self.connected.wait(timeout=timeout)
         if result:
-            self.logger.debug("Successfully connected to MQTT broker", "timeout_value", timeout)
+            self.logger.debugw("Successfully connected to MQTT broker", "timeout_value", timeout)
         else:
             self.logger.warnw("Connection timeout to MQTT broker", "timeout_value", timeout)
         return result
@@ -151,7 +151,7 @@ class MQTTClient:
             del self.topic_handlers[topic]
 
         if self.connected.is_set():
-            self.logger.info("Unsubscribing from topic", "topic", topic)
+            self.logger.infow("Unsubscribing from topic", "topic", topic)
             self.client.unsubscribe(topic)
         else:
             self.logger.warnw("Cannot unsubscribe from topic: Not connected", "topic", topic)
@@ -173,7 +173,7 @@ class MQTTClient:
             return False
 
         try:
-            self.logger.debug(
+            self.logger.debugw(
                 "Publishing message",
                 "topic",
                 topic,
@@ -196,12 +196,12 @@ class MQTTClient:
     def _on_connect(self, client, userdata, flags, rc):
         """Callback for when the client connects to the broker."""
         if rc == 0:
-            # self.logger.info("Connected to MQTT broker", "rc", str(rc), "client_id", self.client_id)
+            # self.logger.infow("Connected to MQTT broker", "rc", str(rc), "client_id", self.client_id)
             self.connected.set()
 
             # Resubscribe to all topics
             for topic in self.topic_handlers:
-                self.logger.debug("Resubscribing to topic", "topic", topic)
+                self.logger.debugw("Resubscribing to topic", "topic", topic)
                 self.client.subscribe(topic)
         else:
             connection_results = {
@@ -243,7 +243,7 @@ class MQTTClient:
             qos = msg.qos
             retain = msg.retain
 
-            self.logger.debug(
+            self.logger.debugw(
                 "Received message", "topic", topic, "payload", payload, "qos", qos, "retain", retain
             )
 
