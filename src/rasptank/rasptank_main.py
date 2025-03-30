@@ -154,7 +154,7 @@ def handle_shoot_command(client, topic, payload, qos, retain):
 
 @log_function_call()
 def handle_scan_command(client, topic, payload, qos, retain):
-    """Handle shoot commands received via MQTT.
+    """Handle scan QR code commands received via MQTT.
 
     Args:
         client (MQTTClient): MQTT client instance
@@ -165,11 +165,11 @@ def handle_scan_command(client, topic, payload, qos, retain):
     """
     global qr, tank_id
     try:
-        logger.infow(f"Scan qr code command received: {payload}")
+        logger.infow("Scan QR code command received", "payload", payload)
         client.publish(QR_TOPIC(tank_id), qr, qos=1)
         client.publish(STATUS_TOPIC, "qr_code_scanning", qos=0)
     except Exception as e:
-        logger.error(f"Error handling shoot command: {e}")
+        logger.errorw("Error handling scan QR command", "error", str(e), exc_info=True)
 
 
 def handle_camera_command(client, topic, payload, qos, retain):
@@ -183,7 +183,7 @@ def handle_camera_command(client, topic, payload, qos, retain):
         retain (bool): Whether the message was retained
     """
     try:
-        logger.info(f"Camera command received: {payload}")
+        logger.infow("Camera command received", "payload", payload)
 
         # Parse pan and tilt values
         parts = payload.split(";")
@@ -194,17 +194,17 @@ def handle_camera_command(client, topic, payload, qos, retain):
 
                 # TODO: Implement actual camera servo control
                 # This could involve driving servo motors via GPIO/PWM
-                logger.info(f"Moving camera to pan={pan}, tilt={tilt}")
+                logger.infow("Moving camera", "pan", pan, "tilt", tilt)
 
                 # Publish confirmation
                 client.publish(STATUS_TOPIC, f"camera_moved;{pan};{tilt}", qos=0)
             except ValueError:
-                logger.warning(f"Invalid camera command format: {payload}")
+                logger.warnw("Invalid camera command format", "payload", payload)
         else:
-            logger.warning(f"Invalid camera command format: {payload}")
+            logger.warnw("Invalid camera command format", "payload", payload)
 
     except Exception as e:
-        logger.error(f"Error handling camera command: {e}")
+        logger.errorw("Error handling camera command", "error", str(e), exc_info=True)
 
 
 # Flag capture logic and timer handled by server not rasptank
@@ -230,6 +230,7 @@ def on_flag_area():
                         payload="ENTER_FLAG_AREA",
                         qos=1,
                     )
+                    logger.debugw("Published flag area entry event", "tank_id", tank_id)
         else:
             if mqtt_client:
                 mqtt_client.publish(
@@ -237,8 +238,9 @@ def on_flag_area():
                     payload="EXIT_FLAG_AREA",
                     qos=1,
                 )
+                logger.debugw("Published flag area exit event", "tank_id", tank_id)
     except Exception as e:
-        logger.errorw(f"Failed to publish flag capturing started event: {e}")
+        logger.errorw("Failed to publish flag area event", "error", str(e), exc_info=True)
 
 
 def handle_flag(client, topic, payload, qos, retain):
@@ -246,8 +248,9 @@ def handle_flag(client, topic, payload, qos, retain):
 
     try:
         # Handle server msg
-        msgs: str = payload.split(" ")
-        msg: str = msgs[0]
+        logger.infow("Flag message received", "topic", topic, "payload", payload)
+        msgs = payload.split(" ")
+        msg = msgs[0]
         if msg == "START_CATCHING":
             capturing = True
             client.publish(STATUS_TOPIC, "Catching flag...", qos=0)
@@ -256,21 +259,28 @@ def handle_flag(client, topic, payload, qos, retain):
                 payload="capturing_flag;captured",
                 qos=1,
             )
+            logger.infow("Starting flag capture animation")
             rasptank_hardware.led_strip.capturing_animation()
         elif msg == "FLAG_CATCHED":
             flag = True
             capturing = False
+            logger.infow("Flag captured, enabling flag possession LED state")
             rasptank_hardware.led_strip.flag_possessed()
         elif msg == "FLAG_LOST":
             flag = False
+            logger.infow("Flag lost")
             # Flag not possessed animation ?
         elif msg == "ABORT_CATCHING_SHOT" or msg == "ABORT_CATCHING_EXIT":
             capturing = False
+            logger.infow("Flag capture aborted", "reason", msg)
             rasptank_hardware.led_strip.stop_animations()
         elif msg == "ALREADY_GOT" or msg == "NOT_ONBASE":
             client.publish(STATUS_TOPIC, "Cannot catch flag...", qos=0)
+            logger.infow("Cannot catch flag", "reason", msg)
         elif msg == "WIN":
-            if msgs[1] == "BLUE":
+            team_winner = msgs[1] if len(msgs) > 1 else "UNKNOWN"
+            logger.infow("Game won", "winning_team", team_winner)
+            if team_winner == "BLUE":
                 client.publish(
                     STATUS_TOPIC, "RAMENEZ LE GREC À LA MAISON, ALLER LES BLEUS ! ALLER !", qos=0
                 )
@@ -282,77 +292,99 @@ def handle_flag(client, topic, payload, qos, retain):
             team = None
             qr = None
             capturing = False
+            logger.infow("Game stats reset")
         elif msg in ["ENTER_FLAG_AREA", "EXIT_FLAG_AREA"]:
+            logger.debugw("Flag area status message", "action", msg)
             pass
         else:
+            logger.warnw("Unknown flag message", "topic", topic, "message", msg)
             print(f"Unknown message from server's on topic {topic}, msg= {msg}")
             # Behaviour to define depending on msg received : start_catching, already_got, not_onbase, abort_catching_exit
     except Exception as e:
-        logger.error(f"Error handling flag command: {e}")
+        logger.errorw("Error handling flag command", "error", str(e), exc_info=True)
 
 
 def handle_init(client, topic, payload, qos, retain):
     global team, qr
     try:
         # Handle server msg
+        logger.infow("Initialization message received", "topic", topic, "payload", payload)
         msgs = payload.split(" ")
         if msgs[0] == "TEAM":
             team = msgs[1]
+            logger.infow("Team assigned", "team", team)
             client.publish(STATUS_TOPIC, f"We are in team {team}", qos=0)
         elif msgs[0] == "QR_CODE":
             qr = msgs[1]
+            logger.infow("QR code received", "qr_code", qr)
             client.publish(STATUS_TOPIC, f"QR code for scan is : {qr}", qos=0)
         elif msgs[0] == "END":
+            logger.infow("Initialization complete")
             client.publish(
                 STATUS_TOPIC, f"Initialisation from server successful, let's beat some ass", qos=0
             )
         else:
+            logger.warnw("Unknown initialization message", "topic", topic, "message", msgs)
             print(f"Unknown message from server's on topic {topic}, msg= {msgs}")
 
     except Exception as e:
-        logger.error(f"Error handling init command: {e}")
+        logger.errorw("Error handling init command", "error", str(e), exc_info=True)
 
 
 def handle_shotin(client, topic, payload, qos, retain):
     try:
         # Handle server msg
+        logger.infow("Shot-in message received", "topic", topic, "payload", payload)
         msg = payload
         if msg == "SHOT":
+            logger.infow("Tank was shot, implementing freeze behavior")
             print("TODO freeze the tank")
+            # TODO: Implement tank freeze behavior here
         else:
+            logger.warnw("Unknown shot-in message", "topic", topic, "message", msg)
             print(f"Unknown message from server's on topic {topic}, msg= {msg}")
     except Exception as e:
-        logger.error(f"Error handling shotin command: {e}")
+        logger.errorw("Error handling shot-in command", "error", str(e), exc_info=True)
 
 
 def handle_shotout(client, topic, payload, qos, retain):
     global hit
     try:
         # Handle server msg
+        logger.infow("Shot-out message received", "topic", topic, "payload", payload)
         msg = payload
         if msg == "FRIENDLY_FIRE":
+            logger.warnw("Friendly fire detected")
             print("TODO stop shooting on friend bro you're stupid")
+            # TODO: Implement friendly fire warning
         elif msg == "SHOT":
-            print("TODO headshot")
             hit = hit + 1
+            logger.infow("Successful hit registered", "total_hits", hit)
+            print("TODO headshot")
+            # TODO: Implement hit success feedback
         else:
+            logger.warnw("Unknown shot-out message", "topic", topic, "message", msg)
             print(f"Unknown message from server's on topic {topic}, msg= {msg}")
     except Exception as e:
-        logger.error(f"Error handling shotin command: {e}")
+        logger.errorw("Error handling shot-out command", "error", str(e), exc_info=True)
 
 
 def handle_qr(client, topic, payload, qos, retain):
     global flag, team, rasptank_hardware
     try:
+        logger.infow("QR code scan result received", "topic", topic, "payload", payload)
         msg = payload
         if msg in ["SCAN_SUCCESSFUL", "SCAN_FAILED", "FLAG_DEPOSITED", "NO_FLAG"]:
             client.publish(STATUS_TOPIC, msg, qos=0)
+            logger.infow("QR scan result", "result", msg)
             if msg == "FLAG_DEPOSITED":
+                logger.infow("Flag successfully deposited, playing scored animation")
                 rasptank_hardware.led_strip.scored_animation()
         else:
+            logger.warnw("Unknown QR scan message", "topic", topic, "message", msg)
             print(f"Unknown message from server's on topic {topic}, msg= {msg}")
     except Exception as e:
-        logger.error(f"Erreur lors du traitement du scan QR : {e}")
+        logger.errorw("Error handling QR scan result", "error", str(e), exc_info=True)
 
 
 def publish_status_update():
@@ -427,7 +459,7 @@ def parse_arguments():
 @log_function_call()
 def main():
     """Main entry point."""
-    global rasptank_hardware, mqtt_client, movement_controller, action_controller, logger, battery_manager
+    global rasptank_hardware, mqtt_client, movement_controller, action_controller, logger, battery_manager, tank_id
 
     # Parse command line arguments
     args = parse_arguments()
@@ -545,13 +577,36 @@ def main():
 
             try:
                 command = rasptank_hardware.led_command_queue.get(timeout=0.1)
-                if command == "hit":
-                    led_logger = logger.with_component("led")
-                    led_logger.infow("Hit event processed in main loop")
+                led_logger = logger.with_component("led")
+
+                if command.startswith("hit:"):
+                    # Parse the shooter ID from the command
+                    parts = command.split(":", 1)
+                    shooter = parts[1] if len(parts) > 1 else "unknown"
+
+                    led_logger.infow("Hit event processed in main loop", "shooter", shooter)
                     rasptank_hardware.led_strip.hit_animation()
+
+                    # Send properly formatted message to server
                     mqtt_client.publish(
-                        topic=SHOTIN_TOPIC(tank_id), payload="SHOT_BY " + command, qos=1
+                        topic=SHOTIN_TOPIC(tank_id), payload=f"SHOT_BY {shooter}", qos=1
                     )
+                    led_logger.debugw("Published shot in event", "shooter", shooter)
+                elif command == "hit":
+                    # Legacy support for old format without shooter ID
+                    led_logger.infow("Hit event processed in main loop (legacy format)")
+                    rasptank_hardware.led_strip.hit_animation()
+
+                    # For legacy support, we need to handle this differently
+                    # Use a placeholder or notify about missing shooter ID
+                    mqtt_client.publish(
+                        topic=SHOTIN_TOPIC(tank_id), payload="SHOT_BY unknown", qos=1
+                    )
+                    led_logger.warnw(
+                        "Published shot in event with unknown shooter - update IR receiver code"
+                    )
+                else:
+                    led_logger.warnw("Unknown command in LED queue", "command", command)
             except Empty:
                 pass  # Normal condition, no commands in queue
             except Exception as e:
