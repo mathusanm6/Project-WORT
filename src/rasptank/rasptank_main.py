@@ -237,6 +237,7 @@ def publish_status_update():
         if battery_manager:
             battery_percent = int(battery_manager.get_battery_percentage())
             power_source = battery_manager.power_source.value
+            raise ValueError(power_source)
 
         # Collect status information
         status = {
@@ -251,7 +252,7 @@ def publish_status_update():
             f"status;{status['battery']};{status['power_source']};{status['timestamp']}"
         )
         mqtt_client.publish(STATUS_TOPIC, status_message, qos=0)
-        logger.debugw(
+        logger.infow(
             "Status published",
             "battery",
             status["battery"],
