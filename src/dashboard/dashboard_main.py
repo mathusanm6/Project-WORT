@@ -216,7 +216,7 @@ def check_tank_connection_timeout():
     global tank_status, logger
 
     # Define the timeout threshold (30 seconds)
-    CONNECTION_TIMEOUT_SECONDS = 30.0
+    CONNECTION_TIMEOUT_SECONDS = 15.0
 
     # Only check if tank was previously marked as connected
     if tank_status["connected"]:
