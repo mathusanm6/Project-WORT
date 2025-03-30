@@ -142,8 +142,8 @@ class BatteryManager:
                             f"{self.battery_percentage:.1f}%",
                         )
 
-            # Check every 10 seconds
-            time.sleep(10.0)
+            # Check every 1 second
+            time.sleep(1.0)
 
     def _save_state(self):
         """Save battery state to disk."""
