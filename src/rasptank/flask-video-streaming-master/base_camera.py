@@ -1,5 +1,6 @@
-import time
 import threading
+import time
+
 try:
     from greenlet import getcurrent as get_ident
 except ImportError:
@@ -13,6 +14,7 @@ class CameraEvent(object):
     """An Event-like class that signals all active clients when a new frame is
     available.
     """
+
     def __init__(self):
         self.events = {}
 
@@ -81,13 +83,13 @@ class BaseCamera(object):
 
     @staticmethod
     def frames():
-        """"Generator that returns frames from the camera."""
-        raise RuntimeError('Must be implemented by subclasses.')
+        """ "Generator that returns frames from the camera."""
+        raise RuntimeError("Must be implemented by subclasses.")
 
     @classmethod
     def _thread(cls):
         """Camera background thread."""
-        print('Starting camera thread.')
+        print("Starting camera thread.")
         frames_iterator = cls.frames()
         for frame in frames_iterator:
             BaseCamera.frame = frame
@@ -98,6 +100,6 @@ class BaseCamera(object):
             # the last 10 seconds then stop the thread
             if time.time() - BaseCamera.last_access > 10:
                 frames_iterator.close()
-                print('Stopping camera thread due to inactivity.')
+                print("Stopping camera thread due to inactivity.")
                 break
         BaseCamera.thread = None
