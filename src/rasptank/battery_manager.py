@@ -30,8 +30,8 @@ class BatteryManager:
     # File to store battery status
     BATTERY_STATE_FILE = "/tmp/rasptank_battery_state.json"
 
-    # Default battery discharge rate (percentage per hour)
-    DEFAULT_DISCHARGE_RATE = 50.0
+    # Default battery discharge rate
+    DEFAULT_DISCHARGE_RATE = 0.5
 
     # Default starting battery percentage if not previously saved
     DEFAULT_BATTERY_PERCENTAGE = 100.0
