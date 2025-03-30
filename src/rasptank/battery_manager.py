@@ -37,12 +37,12 @@ class BatteryManager:
         self.power_source = PowerSource.WIRED
         self.battery_percentage = self.DEFAULT_BATTERY_PERCENTAGE
         self.discharge_rate = self.DEFAULT_DISCHARGE_RATE
-        self.last_update_time = time.time()
         self.last_save_time = 0
         self._running = False
         self._thread = None
         self._lock = threading.Lock()
 
+        # Important: Set last_update_time AFTER loading state to avoid huge time differences
         self._load_state()
         self.last_update_time = time.time()  # Ensure it's set correctly after loading
 
@@ -112,9 +112,23 @@ class BatteryManager:
                 with self._lock:
                     # Calculate time since last update
                     current_time = time.time()
-                    elapsed_hours = (current_time - self.last_update_time) / 3600.0
 
-                    # Update battery percentage
+                    # Guard against unrealistic time differences
+                    # If more than 1 minute passed, something is wrong - cap it
+                    elapsed_seconds = current_time - self.last_update_time
+                    if elapsed_seconds > 60:
+                        self.logger.warnw(
+                            "Unusually large time difference detected in battery monitor",
+                            "seconds",
+                            elapsed_seconds,
+                            "capping_to",
+                            5,
+                        )
+                        elapsed_seconds = 5
+
+                    elapsed_hours = elapsed_seconds / 3600.0
+
+                    # Update battery percentage with reasonable discharge
                     discharge_amount = elapsed_hours * self.discharge_rate
                     self.battery_percentage = max(0.0, self.battery_percentage - discharge_amount)
                     self.last_update_time = current_time
@@ -173,7 +187,8 @@ class BatteryManager:
             self.battery_percentage = float(
                 state.get("battery_percentage", self.DEFAULT_BATTERY_PERCENTAGE)
             )
-            self.last_update_time = float(state.get("last_update_time", time.time()))
+            # Intentionally NOT loading last_update_time from file to avoid instant discharge
+            # if program has been off for a while
             self.discharge_rate = float(state.get("discharge_rate", self.DEFAULT_DISCHARGE_RATE))
             self.logger.infow(
                 "Loaded saved battery state",
