@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import logging
 import os
 import sys
 import time
@@ -61,11 +62,99 @@ except ImportError:
 app = Flask(__name__)
 camera_instance = None
 
-# Configure Flask logging to use our logger
+# Configure Flask's internal logging
+# Disable Werkzeug's default logger
+werkzeug_logger = logging.getLogger("werkzeug")
+werkzeug_logger.setLevel(logging.ERROR)  # Only show errors, not routine requests
+
+# Configure the Flask logger
+flask_logger = logging.getLogger("flask.app")
+flask_logger.setLevel(logging.INFO)
+
+# Add our logger's handlers to Flask's logger
 app.logger.handlers = []
 for handler in logger.logger.handlers:
     app.logger.addHandler(handler)
 app.logger.setLevel(logger.logger.level)
+
+
+# Create a request filter to only log interesting requests
+class RequestFilter:
+    def __init__(self):
+        self.last_log_time = 0
+        self.request_counts = {}
+        self.log_interval = 60  # Log stats every 60 seconds
+
+    def should_log(self, request, response_code):
+        """Determine if this request should be logged based on our filtering rules"""
+        # Always log non-200 responses
+        if response_code != 200:
+            return True
+
+        # Always log requests that aren't to our high-volume endpoints
+        if not request.path.startswith("/latest_frame") and not request.path.startswith(
+            "/video_feed"
+        ):
+            return True
+
+        # For high-volume endpoints, track counts and log periodically
+        current_time = time.time()
+        endpoint = request.path.split("?")[0]  # Remove query params
+
+        # Initialize counter for this endpoint if needed
+        if endpoint not in self.request_counts:
+            self.request_counts[endpoint] = 0
+
+        # Increment counter
+        self.request_counts[endpoint] += 1
+
+        # Check if it's time to log stats
+        if current_time - self.last_log_time >= self.log_interval:
+            # It's time to log the stats for all endpoints
+            self.last_log_time = current_time
+            return "stats"
+
+        return False
+
+
+request_filter = RequestFilter()
+
+
+# Add our custom request logging
+@app.after_request
+def log_request(response):
+    """Custom request logger with filtering for high-volume endpoints"""
+    # Check if we should log this request
+    log_decision = request_filter.should_log(request, response.status_code)
+
+    if log_decision == "stats":
+        # Log periodic stats for high-volume endpoints
+        http_logger.infow(
+            "Request statistics for high-volume endpoints",
+            **{
+                f"count_{endpoint}": count
+                for endpoint, count in request_filter.request_counts.items()
+            },
+        )
+        # Reset counters
+        request_filter.request_counts = {}
+    elif log_decision:
+        # Log individual request
+        http_logger.infow(
+            "Request processed",
+            "method",
+            request.method,
+            "path",
+            request.path,
+            "status",
+            response.status_code,
+            "size",
+            response.content_length,
+            "remote_addr",
+            request.remote_addr,
+        )
+
+    return response
 
 
 # Add a health check endpoint
@@ -105,7 +194,6 @@ def get_camera():
 @app.route("/")
 def index():
     """Video streaming home page."""
-    http_logger.infow("Home page accessed", "remote_addr", request.remote_addr)
     return render_template("index.html")
 
 
@@ -198,8 +286,6 @@ def gen(camera):
 @app.route("/video_feed")
 def video_feed():
     """Video streaming route. Put this in the src attribute of an img tag."""
-    http_logger.infow("Video feed requested", "remote_addr", request.remote_addr)
-
     try:
         camera = get_camera()
         return Response(
@@ -226,8 +312,6 @@ def video_feed():
 @app.route("/latest_frame")
 def latest_frame():
     """Alternative endpoint that returns just the latest frame as JPEG."""
-    http_logger.debugw("Latest frame requested", "remote_addr", request.remote_addr)
-
     try:
         # Get the latest frame
         frame = get_camera().get_frame()
