@@ -56,6 +56,7 @@ flag = False
 hit = 0
 capturing = False
 tank_id = None
+is_currently_on_zone = False
 
 
 def create_logger(log_level_str):
@@ -209,44 +210,56 @@ def on_flag_area():
     Checks whether the Rasptank is on the capture zone and handles
     the full capture logic (timing, MQTT events, animations).
     """
-    global rasptank_hardware, mqtt_client, flag, capturing, tank_id
+    global rasptank_hardware, mqtt_client, flag, capturing, tank_id, is_currently_on_zone
 
     # Track whether the tank is currently on the zone
-    is_on_zone = rasptank_hardware.is_on_top_of_capture_zone()
+    new_zone_status = rasptank_hardware.is_on_top_of_capture_zone()
 
-    try:
-        if is_on_zone:
-            if (
-                not capturing
-            ):  # and not flag: to avoid sending again but server can send us already_got
+    # Only send a message if the status has changed
+    if new_zone_status != is_currently_on_zone:
+        try:
+            if new_zone_status:
                 # Just entered the zone
-                if mqtt_client:
+                if mqtt_client and not capturing:
                     mqtt_client.publish(
                         topic=FLAG_TOPIC(tank_id),
                         payload="ENTER_FLAG_AREA",
                         qos=1,
                     )
                     logger.debugw("Published flag area entry event", "tank_id", tank_id)
-        else:
-            if mqtt_client:
-                mqtt_client.publish(
-                    topic=FLAG_TOPIC(tank_id),
-                    payload="EXIT_FLAG_AREA",
-                    qos=1,
-                )
-                logger.debugw("Published flag area exit event", "tank_id", tank_id)
-    except Exception as e:
-        logger.errorw("Failed to publish flag area event", "error", str(e), exc_info=True)
+            else:
+                # Just exited the zone
+                if mqtt_client:
+                    mqtt_client.publish(
+                        topic=FLAG_TOPIC(tank_id),
+                        payload="EXIT_FLAG_AREA",
+                        qos=1,
+                    )
+                    logger.debugw("Published flag area exit event", "tank_id", tank_id)
+        except Exception as e:
+            logger.errorw("Failed to publish flag area event", "error", str(e), exc_info=True)
+
+        # Update the status for next comparison
+        is_currently_on_zone = new_zone_status
 
 
 def handle_flag(client, topic, payload, qos, retain):
     global rasptank_hardware, flag, hit, team, qr, capturing
-
     try:
         # Handle server msg
-        logger.infow("Flag message received", "topic", topic, "payload", payload)
         msgs = payload.split(" ")
         msg = msgs[0]
+
+        # Check first if it's a frequent status message
+        if msg in ["ENTER_FLAG_AREA", "EXIT_FLAG_AREA"]:
+            # Log these frequent messages at DEBUG level only
+            logger.debugw("Flag area status message", "action", msg)
+            # No further processing needed for these messages
+            return
+
+        # For all other messages (important ones), log at INFO level
+        logger.infow("Flag message received", "topic", topic, "payload", payload)
+
         if msg == "START_CATCHING":
             capturing = True
             client.publish(STATUS_TOPIC, "Catching flag...", qos=0)
@@ -289,13 +302,9 @@ def handle_flag(client, topic, payload, qos, retain):
             qr = None
             capturing = False
             logger.infow("Game stats reset")
-        elif msg in ["ENTER_FLAG_AREA", "EXIT_FLAG_AREA"]:
-            logger.debugw("Flag area status message", "action", msg)
-            pass
         else:
             logger.warnw("Unknown flag message", "topic", topic, "message", msg)
             print(f"Unknown message from server's on topic {topic}, msg= {msg}")
-            # Behaviour to define depending on msg received : start_catching, already_got, not_onbase, abort_catching_exit
     except Exception as e:
         logger.errorw("Error handling flag command", "error", str(e), exc_info=True)
 
