@@ -85,8 +85,14 @@ class BatteryManager:
     def set_power_source(self, source: PowerSource):
         """Change the power source."""
         with self._lock:
+            old_source = self.power_source
             self.power_source = source
-            self.last_update_time = time.time()
+
+            # Reset the last_update_time when switching to battery power
+            # This prevents a large initial discharge calculation
+            if old_source == PowerSource.WIRED and source == PowerSource.BATTERY:
+                self.last_update_time = time.time()
+
             self._save_state()
             self.logger.infow(
                 "Power source changed",
@@ -121,17 +127,20 @@ class BatteryManager:
         while self._running:
             if self.power_source == PowerSource.BATTERY:
                 with self._lock:
-                    # Calculate time since last update
-                    current_time = time.time()
-                    elapsed_hours = (current_time - self.last_update_time) / 3600.0
+                    # Calculate time since last loop iteration (10 seconds)
+                    # This is the key fix - use a fixed small time interval
+                    # rather than potentially large gaps between updates
+                    elapsed_hours = 10.0 / 3600.0  # 10 seconds in hours
 
-                    # Update battery percentage
+                    # Update battery percentage based on fixed small interval
                     discharge_amount = elapsed_hours * self.discharge_rate
                     self.battery_percentage = max(0.0, self.battery_percentage - discharge_amount)
-                    self.last_update_time = current_time
+
+                    # Update the last update time
+                    self.last_update_time = time.time()
 
                     # Periodically save state to disk
-                    if current_time - self.last_save_time > self.SAVE_THROTTLE_SECONDS:
+                    if time.time() - self.last_save_time > self.SAVE_THROTTLE_SECONDS:
                         self._save_state()
 
                     # Log if battery is getting low
