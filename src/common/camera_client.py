@@ -16,6 +16,8 @@ from typing import Callable, List, Optional, Tuple
 import numpy as np
 import pygame
 
+from src.common.logging.logger_api import Logger
+
 
 class CameraClient:
     """
@@ -30,31 +32,33 @@ class CameraClient:
 
     def __init__(
         self,
+        logger: Logger,
         server_url: str = "http://100.127.187.15:5000",
         target_fps: int = 30,
         num_fetch_threads: int = 2,
         max_queue_size: int = 3,
         timeout: float = 0.3,
-        enable_logging: bool = False,
     ):
         """
         Initialize the high performance camera client.
 
         Args:
+            logger: Logger instance for structured logging
             server_url: URL of the camera server
             target_fps: Target frames per second
             num_fetch_threads: Number of parallel fetching threads
             max_queue_size: Maximum size of frame queue
             timeout: Timeout for HTTP requests
-            enable_logging: Whether to print debug logs
         """
+        # Logger
+        self.logger = logger.with_component("CameraClient")
+
         # Configuration
         self.server_url = server_url
         self.target_fps = target_fps
         self.frame_interval = 1.0 / target_fps
         self.num_fetch_threads = num_fetch_threads
         self.timeout = timeout
-        self.logging = enable_logging
 
         # State variables
         self.running = False
@@ -91,11 +95,6 @@ class CameraClient:
         # Try initial connection
         self._check_connection()
 
-    def _log(self, message: str) -> None:
-        """Print a log message if logging is enabled."""
-        if self.logging:
-            print(f"[CameraClient] {message}")
-
     def _check_connection(self) -> bool:
         """Check connection to camera server."""
         now = time.time()
@@ -114,10 +113,10 @@ class CameraClient:
 
                 if self.connected:
                     self.connection_errors = 0
-                    self._log(f"Connected to camera server at {self.server_url}")
+                    self.logger.infow("Connected to camera server", server_url=self.server_url)
                 else:
                     self.connection_errors += 1
-                    self._log(f"Server returned non-200 status: {response.status}")
+                    self.logger.warnw("Server returned non-200 status", status=response.status)
 
                 return self.connected
 
@@ -125,13 +124,19 @@ class CameraClient:
             self.connected = False
             self.connection_errors += 1
             if self.connection_errors <= 1 or self.connection_errors % 10 == 0:
-                self._log(f"Connection error: {str(e)}")
+                self.logger.errorw(
+                    "Connection error",
+                    error=str(e),
+                    server_url=self.server_url,
+                    connection_attempts=self.connection_errors,
+                )
             return False
 
     def _fetch_frames_worker(self) -> None:
         """Worker thread that continuously fetches frames from the server."""
         thread_id = threading.get_ident()
-        self._log(f"Frame fetch thread {thread_id} started")
+        thread_logger = self.logger.with_context(thread_id=thread_id, worker_type="frame_fetch")
+        thread_logger.debugw("Frame fetch thread started")
 
         consecutive_errors = 0
 
@@ -175,12 +180,18 @@ class CameraClient:
                     else:
                         consecutive_errors += 1
                         if consecutive_errors <= 3:
-                            self._log(f"Server returned status: {response.status}")
+                            thread_logger.warnw(
+                                "Server returned non-200 status",
+                                status=response.status,
+                                consecutive_errors=consecutive_errors,
+                            )
 
             except Exception as e:
                 consecutive_errors += 1
                 if consecutive_errors <= 3 or consecutive_errors % 10 == 0:
-                    self._log(f"Error fetching frame: {str(e)}")
+                    thread_logger.errorw(
+                        "Error fetching frame", error=str(e), consecutive_errors=consecutive_errors
+                    )
 
                 # Adjust connection status
                 if consecutive_errors >= 3:
@@ -198,11 +209,13 @@ class CameraClient:
             while time.time() < sleep_until and not self.stop_event.is_set():
                 time.sleep(0.01)
 
-        self._log(f"Frame fetch thread {thread_id} stopped")
+        thread_logger.debugw("Frame fetch thread stopped")
 
     def _process_frames_worker(self) -> None:
         """Worker thread that processes frames from the queue."""
-        self._log("Frame processing thread started")
+        thread_id = threading.get_ident()
+        thread_logger = self.logger.with_context(thread_id=thread_id, worker_type="frame_process")
+        thread_logger.debugw("Frame processing thread started")
 
         while not self.stop_event.is_set():
             try:
@@ -228,11 +241,14 @@ class CameraClient:
                     self._fps_frame_count = 0
 
                     # Log stats occasionally
-                    if self.logging and self.frames_received % 30 == 0:
-                        self._log(
-                            f"Stats: FPS={self.actual_fps:.1f}, "
-                            + f"Latency={self.network_latency*1000:.1f}ms, "
-                            + f"Queue={self.frame_queue.qsize()}/{self.frame_queue.maxsize}"
+                    if self.frames_received % 30 == 0:
+                        thread_logger.debugw(
+                            "Performance stats",
+                            fps=round(self.actual_fps, 1),
+                            latency_ms=round(self.network_latency * 1000, 1),
+                            queue_size=self.frame_queue.qsize(),
+                            queue_max=self.frame_queue.maxsize,
+                            frames_received=self.frames_received,
                         )
 
                 # Mark task as done
@@ -241,14 +257,18 @@ class CameraClient:
             except Exception as e:
                 self.frame_processing_errors += 1
                 if self.frame_processing_errors <= 5 or self.frame_processing_errors % 20 == 0:
-                    self._log(f"Error processing frame: {str(e)}")
+                    thread_logger.errorw(
+                        "Error processing frame",
+                        error=str(e),
+                        processing_errors=self.frame_processing_errors,
+                    )
 
-        self._log("Frame processing thread stopped")
+        thread_logger.debugw("Frame processing thread stopped")
 
     def start_continuous_frames(self) -> None:
         """Start continuous frame fetching."""
         if self.running:
-            self._log("Already running")
+            self.logger.warnw("Already running")
             return
 
         self.stop_event.clear()
@@ -265,7 +285,11 @@ class CameraClient:
         self.process_thread = threading.Thread(target=self._process_frames_worker, daemon=True)
         self.process_thread.start()
 
-        self._log(f"Started {self.num_fetch_threads} fetch threads and 1 process thread")
+        self.logger.infow(
+            "Started frame fetching threads",
+            fetch_threads=self.num_fetch_threads,
+            process_threads=1,
+        )
         self._fps_update_time = time.time()
         self._fps_frame_count = 0
 
@@ -274,7 +298,7 @@ class CameraClient:
         if not self.running:
             return
 
-        self._log("Stopping frame fetching")
+        self.logger.infow("Stopping frame fetching")
         self.stop_event.set()
         self.running = False
 
@@ -295,7 +319,7 @@ class CameraClient:
 
         self.fetch_threads = []
         self.process_thread = None
-        self._log("Frame fetching stopped")
+        self.logger.infow("Frame fetching stopped")
 
     def get_frame_as_pygame_surface(
         self, max_age_seconds: float = 0.1, scale_to: Optional[Tuple[int, int]] = None
@@ -375,7 +399,11 @@ class CameraClient:
         except Exception as e:
             self.frame_processing_errors += 1
             if self.frame_processing_errors <= 5 or self.frame_processing_errors % 20 == 0:
-                self._log(f"Error creating Pygame surface: {str(e)}")
+                self.logger.errorw(
+                    "Error creating Pygame surface",
+                    error=str(e),
+                    processing_errors=self.frame_processing_errors,
+                )
             return self.latest_surface
 
     def read_qr_codes(self, force_refresh: bool = False) -> List[str]:
@@ -411,12 +439,12 @@ class CameraClient:
                         self.latest_qr_codes = data.get("qr_codes", [])
                         self.latest_qr_time = now
 
-                        if self.latest_qr_codes and self.logging:
-                            self._log(f"QR codes detected: {self.latest_qr_codes}")
+                        if self.latest_qr_codes:
+                            self.logger.infow("QR codes detected", qr_codes=self.latest_qr_codes)
 
                         return self.latest_qr_codes
-        except:
-            pass
+        except Exception as e:
+            self.logger.warnw("Error reading QR codes", error=str(e))
 
         return self.latest_qr_codes
 
@@ -445,7 +473,7 @@ class CameraClient:
         self.latest_surface = None
         self.latest_qr_codes = []
 
-        self._log("Resources cleaned up")
+        self.logger.infow("Resources cleaned up")
 
     def change_server_url(self, new_url: str) -> None:
         """
@@ -454,7 +482,7 @@ class CameraClient:
         Args:
             new_url: New camera server URL
         """
-        self._log(f"Changing server URL from {self.server_url} to {new_url}")
+        self.logger.infow("Changing server URL", old_url=self.server_url, new_url=new_url)
 
         # Stop continuous fetching if active
         was_running = self.running
