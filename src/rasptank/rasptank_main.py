@@ -286,6 +286,9 @@ def parse_arguments():
     )
 
     parser.add_argument("--client-id", type=str, default="rasptank", help="MQTT client ID")
+    parser.add_argument(
+        "--reset-battery", action="store_true", help="Reset battery to full charge (100%)"
+    )
 
     return parser.parse_args()
 
@@ -326,6 +329,10 @@ def main():
         # Initialize Battery Manager (add after other initializations)
         battery_logger = logger.with_component("battery")
         battery_manager = BatteryManager(battery_logger)
+
+        if args.reset_battery:
+            logger.infow("Resetting battery to full charge (100%)")
+            battery_manager.reset_battery()
 
         # Prompt user for power source
         power_source = setup_power_source_prompt(battery_logger)

@@ -498,36 +498,7 @@ class ControllerAdapter:
             self.thrust_direction = ThrustDirection.NONE
             speed_mode = SpeedMode.STOP
 
-        # If we're not thrusting but we are turning, use the current turn mode (pivot or spin)
-        if (
-            self.thrust_direction is ThrustDirection.NONE
-            and self.turn_direction is not TurnDirection.NONE
-        ):
-            self.turn_type = TurnType.PIVOT if self.pivot_mode else TurnType.SPIN
-            speed_mode = self.speed_modes[self.current_speed_mode_idx]
-
-            self._send_movement_command(
-                self.thrust_direction,
-                self.turn_direction,
-                self.turn_type,
-                speed_mode,
-                self.curved_turn_rate,
-            )
-
-        if (
-            self.thrust_direction is not ThrustDirection.NONE
-            and self.turn_direction is not TurnDirection.NONE
-        ):
-            self.turn_type = TurnType.CURVE
-            self._send_movement_command(
-                self.thrust_direction,
-                self.turn_direction,
-                self.turn_type,
-                speed_mode,
-                self.curved_turn_rate,
-            )
-
-        # Only send command if there's actual movement
+        # Determine movement type and send appropriate command
         if (
             self.thrust_direction is ThrustDirection.NONE
             and self.turn_direction is TurnDirection.NONE
@@ -544,6 +515,39 @@ class ControllerAdapter:
                     SpeedMode.STOP,
                     CurvedTurnRate.NONE,
                 )
+        elif (
+            self.thrust_direction is not ThrustDirection.NONE
+            and self.turn_direction is not TurnDirection.NONE
+        ):
+            # Curved movement when both thrust and turn are active
+            self.turn_type = TurnType.CURVE
+            self._send_movement_command(
+                self.thrust_direction,
+                self.turn_direction,
+                self.turn_type,
+                speed_mode,
+                self.curved_turn_rate,
+            )
+        elif self.thrust_direction is not ThrustDirection.NONE:
+            # Forward/backward movement with no turning
+            self._send_movement_command(
+                self.thrust_direction,
+                TurnDirection.NONE,
+                TurnType.NONE,
+                speed_mode,
+                CurvedTurnRate.NONE,
+            )
+        elif self.turn_direction is not TurnDirection.NONE:
+            # Turning without thrust (pivot or spin)
+            self.turn_type = TurnType.PIVOT if self.pivot_mode else TurnType.SPIN
+            speed_mode = self.speed_modes[self.current_speed_mode_idx]
+            self._send_movement_command(
+                ThrustDirection.NONE,
+                self.turn_direction,
+                self.turn_type,
+                speed_mode,
+                CurvedTurnRate.NONE,
+            )
 
     def _send_movement_command(
         self,
