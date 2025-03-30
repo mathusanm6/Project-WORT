@@ -506,11 +506,6 @@ class ControllerAdapter:
             self.turn_type = TurnType.PIVOT if self.pivot_mode else TurnType.SPIN
             speed_mode = self.speed_modes[self.current_speed_mode_idx]
 
-        # Only send command if there's actual movement
-        if (
-            self.thrust_direction is not ThrustDirection.NONE
-            or self.turn_direction is not TurnDirection.NONE
-        ):
             self._send_movement_command(
                 self.thrust_direction,
                 self.turn_direction,
@@ -518,7 +513,25 @@ class ControllerAdapter:
                 speed_mode,
                 self.curved_turn_rate,
             )
-        else:
+
+        if (
+            self.thrust_direction is not ThrustDirection.NONE
+            and self.turn_direction is not TurnDirection.NONE
+        ):
+            self.turn_type = TurnType.CURVE
+            self._send_movement_command(
+                self.thrust_direction,
+                self.turn_direction,
+                self.turn_type,
+                speed_mode,
+                self.curved_turn_rate,
+            )
+
+        # Only send command if there's actual movement
+        if (
+            self.thrust_direction is ThrustDirection.NONE
+            and self.turn_direction is TurnDirection.NONE
+        ):
             # Stop if no input and we were moving before
             if self.last_movement and not (
                 self.last_movement[0] is ThrustDirection.NONE
