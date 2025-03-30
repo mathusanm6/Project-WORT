@@ -45,6 +45,7 @@ from src.rasptank.hardware.hardware_main import RasptankHardware
 from src.rasptank.movement.controller.mqtt import MQTTMovementController
 
 # Global variables for resources that need cleanup
+args = None
 logger: Logger = None
 battery_manager: BatteryManager = None
 rasptank_hardware: RasptankHardware = None
@@ -366,6 +367,8 @@ def handle_shoot_command(client, topic, payload, qos, retain):
 def handle_scan_command(client, topic, payload, qos, retain):
     """Handle scan QR code commands received via MQTT.
 
+    Uses the CameraClient to fetch QR codes directly from the camera server.
+
     Args:
         client (MQTTClient): MQTT client instance
         topic (str): Topic the message was received on
@@ -373,12 +376,56 @@ def handle_scan_command(client, topic, payload, qos, retain):
         qos (int): QoS level
         retain (bool): Whether the message was retained
     """
+    global qr, camera_client
+
     try:
         logger.infow("Scan QR code command received", "payload", payload)
-        client.publish(QR_TOPIC(tank_id), qr, qos=1)
-        client.publish(STATUS_TOPIC, "qr_code_scanning", qos=0)
+
+        # Check if camera client is initialized
+        if (
+            not hasattr(handle_scan_command, "camera_client")
+            or handle_scan_command.camera_client is None
+        ):
+            # Initialize the camera client if not already done
+            from src.common.camera_client import CameraClient
+
+            camera_server_url = os.environ.get("CAMERA_SERVER_URL", "http://localhost:5000")
+            handle_scan_command.camera_client = CameraClient(
+                server_url=camera_server_url,
+                enable_logging=logger.logger.level <= LogLevel.DEBUG,
+                timeout=1.0,
+            )
+            logger.infow("Camera client initialized", "server_url", camera_server_url)
+
+        # Try to read QR codes from the camera
+        logger.infow("Scanning for QR codes")
+        client.publish(STATUS_TOPIC, "Scanning for QR codes...", qos=0)
+
+        # Force refresh to get the latest QR codes
+        qr_codes = handle_scan_command.camera_client.read_qr_codes(force_refresh=True)
+
+        if qr_codes:
+            detected_qr = qr_codes[0]  # Use the first detected QR code
+            logger.infow("QR code detected via camera", "qr_code", detected_qr)
+
+            # Send the detected QR code to the server
+            client.publish(QR_TOPIC(tank_id), detected_qr, qos=1)
+            client.publish(STATUS_TOPIC, f"QR code detected: {detected_qr}", qos=0)
+        else:
+            # If no QR code detected via camera, fall back to the stored QR value
+            logger.warnw("No QR code detected via camera, using stored value", "stored_qr", qr)
+            client.publish(QR_TOPIC(tank_id), qr, qos=1)
+            client.publish(STATUS_TOPIC, "Using stored QR code value", qos=0)
+
     except Exception as e:
         logger.errorw("Error handling scan QR command", "error", str(e), exc_info=True)
+
+        # Fall back to the stored QR value in case of error
+        try:
+            client.publish(QR_TOPIC(tank_id), qr, qos=1)
+            client.publish(STATUS_TOPIC, "Error scanning QR code, using stored value", qos=0)
+        except Exception as fallback_error:
+            logger.errorw("Error in fallback QR code handling", "error", str(fallback_error))
 
 
 def handle_camera_command(client, topic, payload, qos, retain):
@@ -653,6 +700,56 @@ def publish_status_update():
         logger.errorw("Error publishing status update", "error", str(e))
 
 
+def initialize_camera_client(camera_server_url=None):
+    """Initialize the camera client for QR code scanning.
+
+    Args:
+        camera_server_url (str, optional): URL for the camera server.
+            If None, uses the local Flask server URL.
+
+    Returns:
+        CameraClient: Initialized camera client instance, or None if initialization failed.
+    """
+    try:
+        camera_client_logger = logger.with_component("camera_client")
+
+        # Use provided URL or construct one from local settings
+        if camera_server_url is None:
+            # Default to localhost with the camera port from args
+            camera_port = getattr(args, "camera_port", 5000)
+            camera_server_url = f"http://localhost:{camera_port}"
+
+        camera_client_logger.infow("Initializing camera client", "server_url", camera_server_url)
+
+        # Import the camera client class
+        from src.common.camera_client import CameraClient
+
+        # Create camera client instance
+        client = CameraClient(
+            server_url=camera_server_url,
+            target_fps=10,  # Lower than default 30 to reduce resource usage
+            num_fetch_threads=1,  # Just one thread since we only need QR codes occasionally
+            enable_logging=logger.logger.level <= LogLevel.DEBUG,
+            timeout=1.0,
+        )
+
+        # Check connection (but don't start continuous frames yet)
+        if client._check_connection():
+            camera_client_logger.infow("Successfully connected to camera server")
+            return client
+        else:
+            camera_client_logger.warnw(
+                "Failed to connect to camera server", "url", camera_server_url
+            )
+            return None
+
+    except Exception as e:
+        camera_client_logger.errorw(
+            "Error initializing camera client", "error", str(e), exc_info=True
+        )
+        return None
+
+
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Rasptank MQTT Control")
@@ -683,6 +780,20 @@ def parse_arguments():
     )
 
     parser.add_argument(
+        "--camera-url",
+        type=str,
+        default=None,
+        help="URL for the camera server (overrides --camera-port if provided)",
+    )
+
+    parser.add_argument(
+        "--qr-scan-timeout",
+        type=float,
+        default=1.0,
+        help="Timeout in seconds for QR code scanning requests",
+    )
+
+    parser.add_argument(
         "--power-source",
         type=str,
         choices=["battery", "wired"],
@@ -696,7 +807,7 @@ def parse_arguments():
 @log_function_call()
 def main():
     """Main entry point."""
-    global rasptank_hardware, mqtt_client, movement_controller, action_controller, logger, battery_manager, tank_id, camera_process
+    global rasptank_hardware, mqtt_client, movement_controller, action_controller, logger, battery_manager, tank_id, camera_process, args
 
     # Parse command line arguments
     args = parse_arguments()
