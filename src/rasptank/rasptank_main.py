@@ -228,10 +228,10 @@ def initialize_camera_client(camera_server_url=None):
 
         # Create camera client instance
         camera_client = CameraClient(
+            logger=camera_client_logger,
             server_url=camera_server_url,
             target_fps=10,  # Lower than default 30 to reduce resource usage
             num_fetch_threads=1,  # Just one thread since we only need QR codes occasionally
-            enable_logging=logger.logger.level <= LogLevel.DEBUG,
             timeout=args.qr_scan_timeout if hasattr(args, "qr_scan_timeout") else 1.0,
         )
 
