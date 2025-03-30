@@ -438,8 +438,6 @@ def handle_scan_command(client, topic, payload, qos, retain):
         qos (int): QoS level
         retain (bool): Whether the message was retained
     """
-    global qr, camera_client
-
     try:
         logger.infow("Scan QR code command received", "payload", payload)
 
@@ -819,7 +817,7 @@ def parse_arguments():
 def main():
     """Main entry point."""
     global rasptank_hardware, mqtt_client, movement_controller, action_controller
-    global logger, battery_manager, tank_id, camera_process, args, camera_client
+    global logger, battery_manager, tank_id, args, camera_client
 
     # Parse command line arguments
     args = parse_arguments()
