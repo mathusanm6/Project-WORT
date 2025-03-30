@@ -46,10 +46,6 @@ tank_status = {"connected": False, "battery": 0, "last_update": 0}
 current_speed_mode = None
 logger = None
 
-# MQTT Topics
-CAMERA_COMMAND_TOPIC = "rasptank/camera/command"
-ACTION_COMMAND_TOPIC = "rasptank/action/command"
-
 
 def create_logger(log_level_str):
     """Create and configure the main logger."""
