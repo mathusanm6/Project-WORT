@@ -93,5 +93,11 @@ def read_qr():
     return jsonify({"success": True, "qr_codes": qr_codes, "count": len(qr_codes)})
 
 
+@app.errorhandler(404)
+def page_not_found(e):
+    """Redirect to the main page if an invalid route is accessed."""
+    return index()
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", threaded=True)
