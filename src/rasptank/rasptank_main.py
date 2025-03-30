@@ -13,6 +13,7 @@ import threading
 import time
 import uuid
 from queue import Empty
+from threading import current_thread, main_thread
 
 from src.common.constants.actions import (
     CAMERA_COMMAND_TOPIC,
@@ -88,10 +89,53 @@ def create_logger(log_level_str):
 
 
 def signal_handler(sig, frame):
-    """Handle termination signals gracefully."""
+    """Handle termination signals gracefully with timeout enforcement."""
     global running
     logger.infow("Signal received. Stopping gracefully...", "signal", sig)
+
+    # Set global running flag to False
     running = False
+
+    # Check for multiple rapid Ctrl+C presses
+    current_time = time.time()
+    if not hasattr(signal_handler, "last_signal_time"):
+        signal_handler.last_signal_time = 0
+        signal_handler.signal_count = 0
+
+    # If another signal was received within 1 second, increment counter
+    if current_time - signal_handler.last_signal_time < 1:
+        signal_handler.signal_count += 1
+    else:
+        signal_handler.signal_count = 1
+
+    signal_handler.last_signal_time = current_time
+
+    # If 3 or more signals received rapidly, force exit
+    if signal_handler.signal_count >= 3:
+        logger.warnw("Multiple interrupt signals received. Forcing immediate exit.")
+        os._exit(1)
+
+    # Start a watchdog thread that will force-exit after a timeout
+    def force_exit():
+        try:
+            time.sleep(3)  # Wait 3 seconds for graceful shutdown
+            if threading.current_thread() != threading.main_thread():
+                logger.errorw("Graceful shutdown timed out after 3 seconds. Forcing exit.")
+                os._exit(1)  # Force exit if still running after timeout
+        except:
+            pass
+
+    # Start the watchdog as daemon thread so it doesn't block program exit
+    watchdog = threading.Thread(target=force_exit, daemon=True)
+    watchdog.start()
+
+    # If in main thread, try to clean up immediately
+    if threading.current_thread() == threading.main_thread():
+        try:
+            cleanup()
+        except Exception as e:
+            logger.errorw("Error during immediate cleanup", "error", str(e))
+            os._exit(1)
 
 
 @log_function_call()
@@ -147,14 +191,7 @@ def cleanup():
 
 def start_camera_server(camera_port=5000, debug_mode=False):
     """
-    Start the Flask camera server in a separate process with improved logging.
-
-    Args:
-        camera_port: Port number for the Flask server
-        debug_mode: Whether to run Flask in debug mode
-
-    Returns:
-        bool: True if server started successfully, False otherwise
+    Start the Flask camera server in a separate process with improved process management.
     """
     global camera_process
 
@@ -195,33 +232,29 @@ def start_camera_server(camera_port=5000, debug_mode=False):
         "CAMERA_LOG_LEVEL": str(logger.logger.level),  # Convert to string to avoid TypeError
     }
 
-    camera_server_logger.debugw(
-        "Prepared environment variables",
-        "flask_app",
-        env_vars["FLASK_APP"],
-        "flask_port",
-        env_vars["FLASK_RUN_PORT"],
-        "flask_debug",
-        env_vars["FLASK_DEBUG"],
-    )
-
     # Start the Flask server as a subprocess
     try:
         start_time = time.time()
         camera_server_logger.infow("Launching camera server subprocess")
 
-        # Pass through stdout/stderr for real-time logging in the parent terminal
-        camera_process = subprocess.Popen(
-            [sys.executable, app_path],
-            # No stdout/stderr redirection - will appear in same terminal
-            env=env_vars,
-        )
+        # Use either preexec_fn OR start_new_session, not both
+        if os.name == "posix":  # Linux, macOS, etc.
+            camera_process = subprocess.Popen(
+                [sys.executable, app_path],
+                env=env_vars,
+                start_new_session=True,  # This will create a new process group
+            )
+        else:  # Windows
+            camera_process = subprocess.Popen(
+                [sys.executable, app_path],
+                env=env_vars,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,  # Windows equivalent
+            )
 
-        # No need to capture and log stdout/stderr as they're now visible in the terminal
         camera_server_logger.infow("Camera server logs will appear in this terminal")
 
         # Wait a moment to ensure the process starts
-        wait_time = 3  # A bit longer for more reliable startup detection
+        wait_time = 3
         camera_server_logger.debugw("Waiting for server startup", "wait_seconds", wait_time)
         time.sleep(wait_time)
 
@@ -250,8 +283,8 @@ def start_camera_server(camera_port=5000, debug_mode=False):
             # Set up a periodic health check for the camera server
             def health_check():
                 try:
-                    # Make sure the process is still running
-                    if camera_process and camera_process.poll() is None:
+                    # Make sure the process is still running and we're still running overall
+                    if camera_process and camera_process.poll() is None and running:
                         health_logger = logger.with_component("camera_health")
                         health_logger.debugw(
                             "Camera server health check",
@@ -264,22 +297,25 @@ def start_camera_server(camera_port=5000, debug_mode=False):
                         )
 
                         # Schedule next check if still running
-                        threading.Timer(30.0, health_check).start()
+                        if running:
+                            threading.Timer(30.0, health_check).start()
                     else:
-                        # Process has died
-                        health_logger = logger.with_component("camera_health")
-                        health_logger.warnw(
-                            "Camera server process died",
-                            "pid",
-                            camera_process.pid if camera_process else None,
-                            "uptime",
-                            f"{time.time() - start_time:.1f}s",
-                        )
+                        # Process has died or program is shutting down
+                        if running:  # Only log if we're not in shutdown
+                            health_logger = logger.with_component("camera_health")
+                            health_logger.warnw(
+                                "Camera server process died",
+                                "pid",
+                                camera_process.pid if camera_process else None,
+                                "uptime",
+                                f"{time.time() - start_time:.1f}s",
+                            )
                 except Exception as e:
                     logger.errorw("Error in health check", "error", str(e), exc_info=True)
 
             # Start first health check after 30 seconds
-            threading.Timer(30.0, health_check).start()
+            if running:
+                threading.Timer(30.0, health_check).start()
 
             return True
         else:
@@ -769,36 +805,72 @@ def main():
         component_logger.infow("Rasptank initialization complete")
 
         # Main event loop
+        shutdown_requested = False
+        shutdown_start_time = None
+        main_loop_iterations = 0
+
+        component_logger.infow("Rasptank initialization complete")
+        component_logger.infow("Press Ctrl+C to exit")
+
         while running:
-            # Setup signal handlers (once)
-            if int(time.time()) % 2 == 0:
+            main_loop_iterations += 1
+
+            # Setup signal handlers (once per second)
+            if main_loop_iterations % 20 == 0:  # Assuming 50ms sleep, this is once per second
                 signal.signal(signal.SIGINT, signal_handler)
                 signal.signal(signal.SIGTERM, signal_handler)
 
+            # If shutdown was requested, track how long it's taking
+            if not running and not shutdown_requested:
+                shutdown_requested = True
+                shutdown_start_time = time.time()
+                component_logger.infow("Shutdown requested, finishing current operations...")
+
+            # If shutdown is taking too long, force exit
+            if shutdown_requested and time.time() - shutdown_start_time > 5:
+                component_logger.warnw(
+                    "Shutdown taking too long, forcing exit",
+                    "shutdown_duration",
+                    f"{time.time() - shutdown_start_time:.1f}s",
+                )
+                break
+
+            # Call the flag capture logic
             on_flag_area()
 
-            # Check camera process health if enabled
-            if args.camera and camera_process and camera_process.poll() is not None:
+            # Check camera process health if enabled (but not during shutdown)
+            if (
+                not shutdown_requested
+                and args.camera
+                and camera_process
+                and camera_process.poll() is not None
+            ):
                 # Camera process has died, log the error
-                stdout, stderr = camera_process.communicate()
-                component_logger.errorw(
-                    "Camera process died unexpectedly",
-                    "returncode",
-                    camera_process.returncode,
-                    "stdout",
-                    stdout.decode("utf-8", errors="ignore"),
-                    "stderr",
-                    stderr.decode("utf-8", errors="ignore"),
-                )
-                # Attempt to restart
-                if start_camera_server(args.camera_port):
+                try:
+                    stdout, stderr = camera_process.communicate(timeout=1)
+                    component_logger.errorw(
+                        "Camera process died unexpectedly",
+                        "returncode",
+                        camera_process.returncode,
+                        "stdout",
+                        stdout.decode("utf-8", errors="ignore") if stdout else "",
+                        "stderr",
+                        stderr.decode("utf-8", errors="ignore") if stderr else "",
+                    )
+                except:
+                    component_logger.errorw(
+                        "Camera process died unexpectedly", "returncode", camera_process.returncode
+                    )
+
+                # Attempt to restart (but not during shutdown)
+                if not shutdown_requested and start_camera_server(args.camera_port):
                     component_logger.infow("Camera process successfully restarted")
 
             try:
                 command = rasptank_hardware.led_command_queue.get(timeout=0.1)
                 led_logger = logger.with_component("led")
 
-                if command.startswith("hit:"):
+                if command == "hit":
                     # Parse the shooter ID from the command
                     parts = command.split(":", 1)
                     shooter = parts[1] if len(parts) > 1 else "unknown"
@@ -831,7 +903,10 @@ def main():
             except Exception as e:
                 component_logger.errorw("Error in main loop", "error", str(e), exc_info=True)
 
-            time.sleep(0.05)  # 50ms
+            # Short sleep to prevent CPU hogging, shorter during shutdown
+            time.sleep(
+                0.05 if not shutdown_requested else 0.01
+            )  # 50ms normal, 10ms during shutdown
 
     except KeyboardInterrupt:
         component_logger.infow("KeyboardInterrupt detected, exiting...")

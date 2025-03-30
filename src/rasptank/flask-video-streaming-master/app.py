@@ -6,7 +6,7 @@ import time
 import traceback
 from importlib import import_module
 
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, current_app, g, jsonify, render_template, request
 
 # Import logging system components
 from src.common.logging.logger_api import Logger, LogLevel
@@ -194,14 +194,24 @@ def get_camera():
 @app.route("/")
 def index():
     """Video streaming home page."""
+    http_logger.infow("Home page accessed", "remote_addr", request.remote_addr)
     return render_template("index.html")
 
 
-def gen(camera):
-    """Video streaming generator function."""
-    stream_id = id(camera)
-    client_ip = request.remote_addr
+def gen(camera, client_ip=None, stream_id=None):
+    """
+    Video streaming generator function.
 
+    Args:
+        camera: Camera instance to get frames from
+        client_ip: IP address of the client (passed from the route)
+        stream_id: Optional unique identifier for the stream
+    """
+    # If no stream_id provided, generate one
+    if stream_id is None:
+        stream_id = id(camera)
+
+    # Create a logger for this specific stream
     stream_instance_logger = stream_logger.with_context(stream_id=stream_id, client_ip=client_ip)
 
     stream_instance_logger.infow("Starting new video stream")
@@ -286,10 +296,16 @@ def gen(camera):
 @app.route("/video_feed")
 def video_feed():
     """Video streaming route. Put this in the src attribute of an img tag."""
+    http_logger.infow("Video feed requested", "remote_addr", request.remote_addr)
+
     try:
+        # Important: Capture client IP here in the request context
+        client_ip = request.remote_addr
+        stream_id = f"stream_{time.time()}"
+
         camera = get_camera()
         return Response(
-            gen(camera),
+            gen(camera, client_ip=client_ip, stream_id=stream_id),
             mimetype="multipart/x-mixed-replace; boundary=frame",
             headers={
                 "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -316,7 +332,9 @@ def latest_frame():
         # Get the latest frame
         frame = get_camera().get_frame()
         if frame is None:
-            http_logger.warnw("No frame available for /latest_frame request")
+            http_logger.warnw(
+                "No frame available for /latest_frame request", "remote_addr", request.remote_addr
+            )
             return Response("No frame available", status=503, mimetype="text/plain")
 
         # Return as a regular JPEG response
