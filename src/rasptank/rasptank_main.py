@@ -15,6 +15,7 @@ import uuid
 from queue import Empty
 from threading import current_thread, main_thread
 
+from src.common.camera_client import CameraClient
 from src.common.constants.actions import (
     CAMERA_COMMAND_TOPIC,
     SCAN_COMMAND_TOPIC,
@@ -54,6 +55,7 @@ movement_controller: MQTTMovementController = None
 action_controller: ActionController = None
 running = True
 camera_process = None
+camera_client: CameraClient = None
 
 # Global variables for ongoing game
 team = None
@@ -142,6 +144,17 @@ def signal_handler(sig, frame):
 @log_function_call()
 def cleanup():
     """Clean up all resources."""
+    global camera_client
+
+    # Clean up camera client if initialized
+    if camera_client:
+        try:
+            logger.infow("Cleaning up camera client")
+            camera_client.cleanup()
+            camera_client = None
+        except Exception as e:
+            logger.errorw("Camera client cleanup failed", "error", str(e), exc_info=True)
+
     # Stop camera process if running
     if camera_process:
         try:
@@ -188,6 +201,55 @@ def cleanup():
             mqtt_client.disconnect()
         except Exception as e:
             logger.errorw("MQTT client disconnect failed", "error", str(e), exc_info=True)
+
+
+def initialize_camera_client(camera_server_url=None):
+    """Initialize the camera client for QR code scanning.
+
+    Args:
+        camera_server_url (str, optional): URL for the camera server.
+            If None, uses the local Flask server URL.
+
+    Returns:
+        CameraClient: Initialized camera client instance, or None if initialization failed.
+    """
+    global camera_client
+
+    try:
+        camera_client_logger = logger.with_component("camera_client")
+
+        # Use provided URL or construct one from local settings
+        if camera_server_url is None:
+            # Default to localhost with the camera port from args
+            camera_port = getattr(args, "camera_port", 5000)
+            camera_server_url = f"http://localhost:{camera_port}"
+
+        camera_client_logger.infow("Initializing camera client", "server_url", camera_server_url)
+
+        # Create camera client instance
+        camera_client = CameraClient(
+            server_url=camera_server_url,
+            target_fps=10,  # Lower than default 30 to reduce resource usage
+            num_fetch_threads=1,  # Just one thread since we only need QR codes occasionally
+            enable_logging=logger.logger.level <= LogLevel.DEBUG,
+            timeout=args.qr_scan_timeout if hasattr(args, "qr_scan_timeout") else 1.0,
+        )
+
+        # Check connection
+        if camera_client._check_connection():
+            camera_client_logger.infow("Successfully connected to camera server")
+            return camera_client
+        else:
+            camera_client_logger.warnw(
+                "Failed to connect to camera server", "url", camera_server_url
+            )
+            return None
+
+    except Exception as e:
+        camera_client_logger.errorw(
+            "Error initializing camera client", "error", str(e), exc_info=True
+        )
+        return None
 
 
 def start_camera_server(camera_port=5000, debug_mode=False):
@@ -367,7 +429,7 @@ def handle_shoot_command(client, topic, payload, qos, retain):
 def handle_scan_command(client, topic, payload, qos, retain):
     """Handle scan QR code commands received via MQTT.
 
-    Uses the CameraClient to fetch QR codes directly from the camera server.
+    Uses the global camera client to fetch QR codes directly from the camera server.
 
     Args:
         client (MQTTClient): MQTT client instance
@@ -382,27 +444,18 @@ def handle_scan_command(client, topic, payload, qos, retain):
         logger.infow("Scan QR code command received", "payload", payload)
 
         # Check if camera client is initialized
-        if (
-            not hasattr(handle_scan_command, "camera_client")
-            or handle_scan_command.camera_client is None
-        ):
-            # Initialize the camera client if not already done
-            from src.common.camera_client import CameraClient
-
-            camera_server_url = os.environ.get("CAMERA_SERVER_URL", "http://localhost:5000")
-            handle_scan_command.camera_client = CameraClient(
-                server_url=camera_server_url,
-                enable_logging=logger.logger.level <= LogLevel.DEBUG,
-                timeout=1.0,
-            )
-            logger.infow("Camera client initialized", "server_url", camera_server_url)
+        if camera_client is None:
+            logger.warnw("Camera client not initialized, using stored QR code")
+            client.publish(QR_TOPIC(tank_id), qr, qos=1)
+            client.publish(STATUS_TOPIC, "Using stored QR code (camera unavailable)", qos=0)
+            return
 
         # Try to read QR codes from the camera
-        logger.infow("Scanning for QR codes")
+        logger.infow("Scanning for QR codes using camera client")
         client.publish(STATUS_TOPIC, "Scanning for QR codes...", qos=0)
 
         # Force refresh to get the latest QR codes
-        qr_codes = handle_scan_command.camera_client.read_qr_codes(force_refresh=True)
+        qr_codes = camera_client.read_qr_codes(force_refresh=True)
 
         if qr_codes:
             detected_qr = qr_codes[0]  # Use the first detected QR code
@@ -673,9 +726,13 @@ def publish_status_update():
             # Add other status fields as needed
         }
 
-        # Add camera status if relevant
+        # Add camera status
         if camera_process:
             status["camera_running"] = camera_process.poll() is None
+
+        # Add camera client status
+        if camera_client:
+            status["camera_client_connected"] = camera_client.connected
 
         # Publish status information
         status_message = (
@@ -688,6 +745,10 @@ def publish_status_update():
             status["battery"],
             "power_source",
             status["power_source"],
+            "camera",
+            status.get("camera_running", False),
+            "camera_client",
+            status.get("camera_client_connected", False),
             "timestamp",
             status["timestamp"],
         )
@@ -698,56 +759,6 @@ def publish_status_update():
 
     except Exception as e:
         logger.errorw("Error publishing status update", "error", str(e))
-
-
-def initialize_camera_client(camera_server_url=None):
-    """Initialize the camera client for QR code scanning.
-
-    Args:
-        camera_server_url (str, optional): URL for the camera server.
-            If None, uses the local Flask server URL.
-
-    Returns:
-        CameraClient: Initialized camera client instance, or None if initialization failed.
-    """
-    try:
-        camera_client_logger = logger.with_component("camera_client")
-
-        # Use provided URL or construct one from local settings
-        if camera_server_url is None:
-            # Default to localhost with the camera port from args
-            camera_port = getattr(args, "camera_port", 5000)
-            camera_server_url = f"http://localhost:{camera_port}"
-
-        camera_client_logger.infow("Initializing camera client", "server_url", camera_server_url)
-
-        # Import the camera client class
-        from src.common.camera_client import CameraClient
-
-        # Create camera client instance
-        client = CameraClient(
-            server_url=camera_server_url,
-            target_fps=10,  # Lower than default 30 to reduce resource usage
-            num_fetch_threads=1,  # Just one thread since we only need QR codes occasionally
-            enable_logging=logger.logger.level <= LogLevel.DEBUG,
-            timeout=1.0,
-        )
-
-        # Check connection (but don't start continuous frames yet)
-        if client._check_connection():
-            camera_client_logger.infow("Successfully connected to camera server")
-            return client
-        else:
-            camera_client_logger.warnw(
-                "Failed to connect to camera server", "url", camera_server_url
-            )
-            return None
-
-    except Exception as e:
-        camera_client_logger.errorw(
-            "Error initializing camera client", "error", str(e), exc_info=True
-        )
-        return None
 
 
 def parse_arguments():
@@ -807,7 +818,8 @@ def parse_arguments():
 @log_function_call()
 def main():
     """Main entry point."""
-    global rasptank_hardware, mqtt_client, movement_controller, action_controller, logger, battery_manager, tank_id, camera_process, args
+    global rasptank_hardware, mqtt_client, movement_controller, action_controller
+    global logger, battery_manager, tank_id, camera_process, args, camera_client
 
     # Parse command line arguments
     args = parse_arguments()
@@ -827,11 +839,35 @@ def main():
     # Initialize resources
     try:
         # Start camera server if enabled
+        camera_server_started = False
         if args.camera:
-            if not start_camera_server(args.camera_port):
+            camera_server_started = start_camera_server(args.camera_port)
+            if not camera_server_started:
                 camera_logger.warnw(
                     "Failed to start camera server, continuing without camera functionality"
                 )
+
+        # Initialize Camera Client
+        if args.camera:
+            # Determine camera URL to use
+            camera_url = args.camera_url
+            if not camera_url and camera_server_started:
+                # If a local camera server was started, use it
+                camera_url = f"http://localhost:{args.camera_port}"
+
+            # Initialize the camera client if URL is available
+            if camera_url:
+                # Allow a moment for the camera server to start
+                if camera_server_started:
+                    time.sleep(1)
+
+                camera_client = initialize_camera_client(camera_url)
+                if camera_client:
+                    camera_logger.infow("Camera client initialized successfully", "url", camera_url)
+                else:
+                    camera_logger.warnw(
+                        "Failed to initialize camera client, QR code scanning may not work properly"
+                    )
 
         # Initialize MQTT Client
         mqtt_logger = component_logger.with_component("mqtt")
@@ -985,11 +1021,29 @@ def main():
                 if not shutdown_requested and start_camera_server(args.camera_port):
                     component_logger.infow("Camera process successfully restarted")
 
+                    # Also reconnect camera client if it was being used
+                    if camera_client:
+                        # Try to clean up the old client first
+                        try:
+                            camera_client.cleanup()
+                        except:
+                            pass
+
+                        # Reinitialize the camera client
+                        time.sleep(1)  # Wait a moment for the server to start
+                        camera_client = initialize_camera_client(
+                            f"http://localhost:{args.camera_port}"
+                        )
+                        if camera_client:
+                            component_logger.infow("Camera client successfully reconnected")
+                        else:
+                            component_logger.warnw("Failed to reconnect camera client")
+
             try:
                 command = rasptank_hardware.led_command_queue.get(timeout=0.1)
                 led_logger = logger.with_component("led")
 
-                if command == "hit":
+                if command.startswith("hit:"):
                     # Parse the shooter ID from the command
                     parts = command.split(":", 1)
                     shooter = parts[1] if len(parts) > 1 else "unknown"
