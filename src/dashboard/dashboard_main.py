@@ -71,7 +71,7 @@ def create_logger(log_level_str):
 
 def signal_handler(sig, frame):
     """Handle termination signals gracefully."""
-    global running, logger
+    global running
     logger.infow("Termination signal received, shutting down...", "signal", sig)
     running = False
 
@@ -93,8 +93,6 @@ def send_movement_command(
         speed_mode (SpeedMode): Speed mode
         curved_turn_rate (CurvedTurnRate): Rate of turn for CURVE turn type (0.0 to 1.0 with 0.0 being no curve)
     """
-    global mqtt_client, logger
-
     if not mqtt_client or not mqtt_client.connected.is_set():
         logger.warnw("Cannot send movement command: MQTT client not connected")
         return
@@ -130,8 +128,6 @@ def send_action_command(action_type: ActionType):
     Args:
         action_type (ActionType): Action
     """
-    global mqtt_client, logger
-
     if not mqtt_client or not mqtt_client.connected.is_set():
         logger.warnw("Cannot send action command", "action", action_type)
         return
@@ -167,8 +163,6 @@ def handle_status_update(client, topic, payload, qos, retain):
         qos (int): QoS level
         retain (bool): Whether the message was retained
     """
-    global tank_status, controller_adapter, logger
-
     try:
         # Parse the status message
         parts = payload.split(";")
@@ -213,8 +207,6 @@ def handle_status_update(client, topic, payload, qos, retain):
 
 def check_tank_connection_timeout():
     """Check if tank connection has timed out due to no recent status messages."""
-    global tank_status, logger
-
     # Define the timeout threshold (30 seconds)
     CONNECTION_TIMEOUT_SECONDS = 15.0
 
@@ -246,8 +238,6 @@ def handle_game_event(client, topic, payload, qos, retain):
         qos (int): QoS level
         retain (bool): Whether the message was retained
     """
-    global logger, dualsense_controller, current_speed_mode
-
     try:
         parts = payload.split(";")
         if len(parts) < 1:
@@ -320,8 +310,6 @@ def handle_game_event(client, topic, payload, qos, retain):
 # This function is kept for backwards compatibility but is not used when GUI is available
 def print_dashboard():
     """Print a simple text-based dashboard to the console."""
-    global tank_status, dualsense_controller, controller_adapter
-
     # Clear the screen (platform-dependent)
     print("\033c", end="")
 

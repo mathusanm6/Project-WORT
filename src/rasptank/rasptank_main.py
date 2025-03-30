@@ -73,8 +73,6 @@ def signal_handler(sig, frame):
 @log_function_call()
 def cleanup():
     """Clean up all resources."""
-    global mqtt_client, movement_controller, action_controller, rasptank_hardware, battery_manager
-
     # Clean up battery manager
     if battery_manager:
         try:
@@ -138,8 +136,6 @@ def handle_flag_capture_logic() -> bool:
     Checks whether the Rasptank is on the capture zone and handles
     the full capture logic (timing, MQTT events, animations).
     """
-    global rasptank_hardware, mqtt_client
-
     is_flag_captured = False
 
     # Track whether the tank is currently on the zone
@@ -221,8 +217,6 @@ def handle_flag_capture_logic() -> bool:
 
 def publish_status_update():
     """Publish periodic status updates."""
-    global mqtt_client, running, logger, battery_manager
-
     if not mqtt_client or not running:
         return
 
@@ -296,7 +290,7 @@ def parse_arguments():
 @log_function_call()
 def main():
     """Main entry point."""
-    global rasptank_hardware, mqtt_client, movement_controller, action_controller, running, logger, battery_manager
+    global rasptank_hardware, mqtt_client, movement_controller, action_controller, logger, battery_manager
 
     # Parse command line arguments
     args = parse_arguments()
