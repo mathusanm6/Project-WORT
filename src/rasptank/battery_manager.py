@@ -59,6 +59,10 @@ class BatteryManager:
         if self._thread is not None and self._thread.is_alive():
             return
 
+        # Before starting the thread, make sure last_update_time is current
+        with self._lock:
+            self.last_update_time = time.time()
+
         self._running = True
         self._thread = threading.Thread(target=self._battery_monitor_thread, daemon=True)
         self._thread.start()
@@ -88,10 +92,9 @@ class BatteryManager:
             old_source = self.power_source
             self.power_source = source
 
-            # Reset the last_update_time when switching to battery power
-            # This prevents a large initial discharge calculation
-            if old_source == PowerSource.WIRED and source == PowerSource.BATTERY:
-                self.last_update_time = time.time()
+            # Always reset the timestamp when changing power source
+            # This prevents incorrect discharge calculations
+            self.last_update_time = time.time()
 
             self._save_state()
             self.logger.infow(
@@ -124,23 +127,37 @@ class BatteryManager:
 
     def _battery_monitor_thread(self):
         """Background thread to simulate battery discharge."""
+        # Initialize last cycle time
+        last_cycle_time = time.time()
+
         while self._running:
+            current_time = time.time()
+
+            # Only process if in battery mode
             if self.power_source == PowerSource.BATTERY:
                 with self._lock:
-                    # Calculate time since last loop iteration (10 seconds)
-                    # This is the key fix - use a fixed small time interval
-                    # rather than potentially large gaps between updates
-                    elapsed_hours = 10.0 / 3600.0  # 10 seconds in hours
+                    # Calculate time since last monitoring cycle
+                    # This ensures we're using the actual elapsed time
+                    elapsed_seconds = current_time - last_cycle_time
+                    elapsed_hours = elapsed_seconds / 3600.0
 
-                    # Update battery percentage based on fixed small interval
+                    # Update battery percentage based on actual elapsed time
                     discharge_amount = elapsed_hours * self.discharge_rate
+
+                    # Safeguard against time jumps
+                    if discharge_amount > 10.0:  # Cap max discharge at 10% per cycle
+                        discharge_amount = 0.01  # Use minimal discharge instead
+                        self.logger.warnw(
+                            "Large time jump detected, using minimal discharge",
+                            "elapsed_seconds",
+                            f"{elapsed_seconds:.1f}s",
+                        )
+
+                    # Apply the calculated discharge
                     self.battery_percentage = max(0.0, self.battery_percentage - discharge_amount)
 
-                    # Update the last update time
-                    self.last_update_time = time.time()
-
                     # Periodically save state to disk
-                    if time.time() - self.last_save_time > self.SAVE_THROTTLE_SECONDS:
+                    if current_time - self.last_save_time > self.SAVE_THROTTLE_SECONDS:
                         self._save_state()
 
                     # Log if battery is getting low
@@ -151,7 +168,10 @@ class BatteryManager:
                             f"{self.battery_percentage:.1f}%",
                         )
 
-            # Check every 10 seconds
+            # Update cycle time tracking
+            last_cycle_time = current_time
+
+            # Sleep for monitoring interval
             time.sleep(10.0)
 
     def _save_state(self):
@@ -160,7 +180,7 @@ class BatteryManager:
             state = {
                 "power_source": self.power_source.value,
                 "battery_percentage": self.battery_percentage,
-                "last_update_time": self.last_update_time,
+                "last_update_time": time.time(),  # Always save current time
                 "discharge_rate": self.discharge_rate,
             }
 
@@ -188,7 +208,8 @@ class BatteryManager:
             self.battery_percentage = float(
                 state.get("battery_percentage", self.DEFAULT_BATTERY_PERCENTAGE)
             )
-            self.last_update_time = float(state.get("last_update_time", time.time()))
+            # Don't use saved last_update_time, always use current time to prevent immediate discharge
+            self.last_update_time = time.time()
             self.discharge_rate = float(state.get("discharge_rate", self.DEFAULT_DISCHARGE_RATE))
 
             self.logger.infow(
