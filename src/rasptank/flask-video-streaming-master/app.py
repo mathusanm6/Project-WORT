@@ -53,7 +53,6 @@ def gen(camera):
             fps = frame_count
             frame_count = 0
             prev_time = current_time
-            print(f"FPS: {fps}")  # Print FPS to the console
 
         yield b"--frame\r\n"
         yield b"Content-Type: image/jpeg\r\n\r\n"
