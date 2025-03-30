@@ -31,6 +31,7 @@ from src.common.enum.movement import (
     TurnDirection,
     TurnType,
 )
+from src.common.logging.logger_api import Logger
 
 
 class RasptankPygameDashboard:
@@ -38,6 +39,7 @@ class RasptankPygameDashboard:
 
     def __init__(
         self,
+        logger: Logger,
         window_title="Rasptank Control Dashboard",
         camera_server_url="http://100.127.187.15:5000",
     ):
@@ -53,6 +55,9 @@ class RasptankPygameDashboard:
 
         # Initialize pygame font
         pygame.font.init()
+
+        # Initialize the logger
+        self.logger = logger
 
         # Window settings
         self.window_size = (1150, 890)
@@ -148,13 +153,15 @@ class RasptankPygameDashboard:
 
         # Initialize camera client
         try:
+            camera_client_logger = self.logger.with_component("camera_client")
+
             self.camera_client = CameraClient(
+                logger=camera_client_logger,
                 server_url=self.camera_server_url,
                 target_fps=30,  # Target 30 frames per second
                 num_fetch_threads=2,  # Use 2 parallel fetch threads
                 max_queue_size=3,  # Keep a small queue for freshness
                 timeout=0.3,  # 300ms timeout for requests
-                enable_logging=False,  # Set to True for debugging
             )
             print(
                 f"High performance camera client initialized with server URL: {self.camera_server_url}"
