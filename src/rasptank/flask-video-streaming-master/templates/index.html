@@ -1,9 +1,164 @@
+<!DOCTYPE html>
 <html>
-  <head>
-    <title>Video Streaming Demonstration</title>
-  </head>
-  <body>
-    <h1>Video Streaming Demonstration</h1>
-    <img src="{{ url_for('video_feed') }}">
-  </body>
+
+<head>
+  <title>Video Streaming Demonstration</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+
+    h1 {
+      margin-bottom: 20px;
+    }
+
+    .video-container {
+      width: 640px;
+      height: 480px;
+      border: 1px solid #ccc;
+      margin-top: 20px;
+      position: relative;
+    }
+
+    .video-container img {
+      width: 100%;
+      height: 100%;
+    }
+
+    .browser-message {
+      display: none;
+      margin-top: 10px;
+      padding: 10px;
+      background-color: #fff3cd;
+      border: 1px solid #ffeeba;
+      border-radius: 4px;
+    }
+
+    /* Loading indicator */
+    .loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      display: none;
+    }
+
+    .loading::after {
+      content: "";
+      display: block;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 6px solid #ccc;
+      border-top-color: #333;
+      animation: spin 1s infinite linear;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Video Streaming Demonstration</h1>
+  <div class="video-container">
+    <img id="videoStream" src="{{ url_for('video_feed') }}" alt="Video Stream">
+    <div id="loading" class="loading"></div>
+  </div>
+  <div id="safariMessage" class="browser-message">
+    Safari detected! If the stream doesn't appear, we'll use an alternative method.
+  </div>
+  <div id="fallbackMessage" class="browser-message">
+    Using fallback mode for better compatibility. Refresh rate may be lower.
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const videoImg = document.getElementById('videoStream');
+      const loading = document.getElementById('loading');
+      const safariMessage = document.getElementById('safariMessage');
+      const fallbackMessage = document.getElementById('fallbackMessage');
+
+      // Check if Safari
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      let usingFallback = false;
+      let fallbackTimer = null;
+
+      if (isSafari) {
+        safariMessage.style.display = 'block';
+      }
+
+      // Function to reload the image
+      function reloadImage() {
+        const currentSrc = videoImg.src;
+        videoImg.src = '';
+        setTimeout(() => {
+          videoImg.src = currentSrc + '?' + new Date().getTime();
+        }, 100);
+      }
+
+      // Switch to fallback mode for Safari or if stream fails
+      function switchToFallback() {
+        if (usingFallback) return;
+
+        usingFallback = true;
+        fallbackMessage.style.display = 'block';
+        videoImg.src = '';
+
+        // Use an interval to fetch frames periodically
+        updateFallbackFrame();
+        fallbackTimer = setInterval(updateFallbackFrame, 100); // 10fps
+      }
+
+      // Update frame in fallback mode
+      function updateFallbackFrame() {
+        videoImg.src = '/latest_frame?' + new Date().getTime();
+      }
+
+      // Show loading indicator
+      loading.style.display = 'block';
+
+      // Handle image load
+      videoImg.addEventListener('load', function () {
+        loading.style.display = 'none';
+      });
+
+      // Try to reload if image appears broken
+      videoImg.addEventListener('error', function () {
+        console.log('Video stream error, attempting to reload...');
+        loading.style.display = 'block';
+
+        if (!usingFallback) {
+          setTimeout(() => {
+            if (isSafari) {
+              switchToFallback();
+            } else {
+              reloadImage();
+              // If error persists, try fallback after a few attempts
+              setTimeout(() => {
+                if (videoImg.naturalWidth === 0) {
+                  switchToFallback();
+                }
+              }, 3000);
+            }
+          }, 1000);
+        }
+      });
+
+      // If Safari, try normal mode first but be ready to switch
+      if (isSafari) {
+        setTimeout(() => {
+          if (videoImg.naturalWidth === 0) {
+            switchToFallback();
+          }
+        }, 3000);
+      }
+    });
+  </script>
+</body>
+
 </html>
