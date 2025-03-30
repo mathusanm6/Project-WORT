@@ -268,7 +268,7 @@ def publish_status_update():
         # Schedule next update if still running - only create a new timer if we're still running
         if running:
             # Store the timer object so we can cancel it if needed
-            status_update_timer = threading.Timer(10.0, publish_status_update)
+            status_update_timer = threading.Timer(1.0, publish_status_update)
             status_update_timer.daemon = (
                 True  # Allow the program to exit even if this thread is running
             )
@@ -278,7 +278,7 @@ def publish_status_update():
         logger.errorw("Error publishing status update", "error", str(e))
         # Still try to schedule the next update on error
         if running:
-            status_update_timer = threading.Timer(10.0, publish_status_update)
+            status_update_timer = threading.Timer(1.0, publish_status_update)
             status_update_timer.daemon = True
             status_update_timer.start()
 
