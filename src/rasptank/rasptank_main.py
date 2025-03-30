@@ -220,9 +220,6 @@ def publish_status_update():
     if not mqtt_client or not running:
         return
 
-    if not mqtt_client or not running:
-        return
-
     try:
         # Get battery percentage from battery manager
         battery_percent = 100  # Default if no battery manager
