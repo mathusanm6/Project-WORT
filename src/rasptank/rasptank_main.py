@@ -647,7 +647,7 @@ def publish_status_update():
 
         # Schedule next update if still running
         if running:
-            threading.Timer(10.0, publish_status_update).start()
+            threading.Timer(5.0, publish_status_update).start()
 
     except Exception as e:
         logger.errorw("Error publishing status update", "error", str(e))

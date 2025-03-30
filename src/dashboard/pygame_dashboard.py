@@ -21,6 +21,8 @@ try:
 except ImportError:
     FREETYPE_AVAILABLE = False
 
+from src.common.camera_client import CameraClient
+
 # Import necessary enums from your existing code
 from src.common.enum.movement import (
     CurvedTurnRate,
@@ -34,11 +36,16 @@ from src.common.enum.movement import (
 class RasptankPygameDashboard:
     """Graphical dashboard for Rasptank controls and status using pygame."""
 
-    def __init__(self, window_title="Rasptank Control Dashboard"):
+    def __init__(
+        self,
+        window_title="Rasptank Control Dashboard",
+        camera_server_url="http://100.127.187.15:5000",
+    ):
         """Initialize the pygame dashboard.
 
         Args:
             window_title (str): Title for the dashboard window
+            camera_server_url (str): URL of the camera server
         """
         # Make sure pygame is initialized
         if not pygame.get_init():
@@ -48,7 +55,7 @@ class RasptankPygameDashboard:
         pygame.font.init()
 
         # Window settings
-        self.window_size = (1400, 860)
+        self.window_size = (1150, 890)
         self.window = pygame.display.set_mode(self.window_size)
         pygame.display.set_caption(window_title)
 
@@ -87,7 +94,6 @@ class RasptankPygameDashboard:
             "grid_line": (55, 60, 68),  # Grid lines
             "overlay_bg": (10, 12, 16, 220),  # Semi-transparent overlay
             "camera_bg": (20, 24, 30),  # Dark background for camera feed
-            "camera_border": (100, 120, 140),  # Highlighted border for camera feed
         }
 
         # Load fonts
@@ -130,11 +136,33 @@ class RasptankPygameDashboard:
             "joystick_position": (0.0, 0.0),
         }
 
-        # Camera feed placeholder
+        # Camera client setup
+        self.camera_server_url = camera_server_url
+        self.camera_client = None
         self.camera_feed = None
         self.camera_connected = False
         self.last_camera_update = 0
+        self.camera_status_message = "Connecting to camera..."
+        self.camera_connection_attempts = 0
         self.placeholder_camera_text = "No Camera Feed"
+
+        # Initialize camera client
+        try:
+            self.camera_client = CameraClient(
+                server_url=self.camera_server_url,
+                target_fps=30,  # Target 30 frames per second
+                num_fetch_threads=2,  # Use 2 parallel fetch threads
+                max_queue_size=3,  # Keep a small queue for freshness
+                timeout=0.3,  # 300ms timeout for requests
+                enable_logging=False,  # Set to True for debugging
+            )
+            print(
+                f"High performance camera client initialized with server URL: {self.camera_server_url}"
+            )
+            self.start_camera_feed()
+        except Exception as e:
+            print(f"Error initializing camera client: {e}")
+            self.camera_status_message = f"Camera error: {str(e)}"
 
         # Setting up a separate clock for the dashboard
         self.clock = pygame.time.Clock()
@@ -188,33 +216,33 @@ class RasptankPygameDashboard:
         # Main sections layout
         layout = {
             # Header section
-            "header": pygame.Rect(0, 0, width, 50),
+            "header": pygame.Rect(0, 0, width, 30),
             # Left column - Tank Status
-            "tank": pygame.Rect(self.padding, 50 + self.padding, left_col_width, 200),
+            "tank": pygame.Rect(self.padding, 30 + self.padding, left_col_width, 200),
             # Left column - Controller Status
             "controller": pygame.Rect(
-                self.padding, 50 + self.padding * 2 + 200, left_col_width, 190
+                self.padding, 30 + self.padding * 2 + 200, left_col_width, 190
             ),
             # Left column - Control Scheme
             "controls": pygame.Rect(
                 self.padding,
-                50 + self.padding * 3 + 190 + 200,
+                30 + self.padding * 3 + 190 + 200,
                 left_col_width,
-                height - (50 + self.padding * 3 + 190 + 200) - self.padding,
+                height - (30 + self.padding * 3 + 190 + 200) - self.padding,
             ),
             # Right column - Camera feed (largest section)
             "camera": pygame.Rect(
                 self.padding * 3 + left_col_width,
-                50 + self.padding,
+                30 + self.padding,
                 right_col_width,
-                550 - self.padding,
+                590 - self.padding,
             ),
             # Right column - Movement status
             "movement": pygame.Rect(
                 self.padding * 3 + left_col_width,
-                50 + self.padding + 550,
+                30 + self.padding + 590,
                 right_col_width,
-                320 - 90,
+                320 - 80,
             ),
         }
 
@@ -241,6 +269,9 @@ class RasptankPygameDashboard:
         self.animation_time = time.time()
         self.pulse_effect = (math.sin(self.animation_time * 3) + 1) / 2  # Value between 0 and 1
 
+        # Update camera feed
+        self.update_camera_feed_from_client()
+
         # Draw the dashboard
         self.draw_dashboard()
 
@@ -257,7 +288,7 @@ class RasptankPygameDashboard:
         pygame.display.flip()
 
         # Cap the frame rate
-        self.clock.tick(30)  # 30fps is plenty for a dashboard
+        self.clock.tick(60)  # 60 FPS
 
         return True
 
@@ -867,7 +898,7 @@ class RasptankPygameDashboard:
         )
 
         # Calculate camera feed display area with padding
-        inner_padding = 10
+        inner_padding = 15
         camera_rect = pygame.Rect(
             body_rect.x + inner_padding,
             body_rect.y + inner_padding,
@@ -878,11 +909,15 @@ class RasptankPygameDashboard:
         # Draw camera feed background
         pygame.draw.rect(self.window, self.colors["camera_bg"], camera_rect)
 
+        # Check camera connection status
+        current_time = time.time()
+        camera_connected = self.camera_connected and (current_time - self.last_camera_update < 5.0)
+
         # Draw border with subtle glow based on connection status
-        border_color = self.colors["green"] if self.camera_connected else self.colors["red"]
+        border_color = self.colors["green"] if camera_connected else self.colors["red"]
 
         # Add pulse effect to border if connected
-        if self.camera_connected:
+        if camera_connected:
             border_alpha = int(150 + 50 * self.pulse_effect)
         else:
             border_alpha = 100  # Dimmer when disconnected
@@ -922,25 +957,57 @@ class RasptankPygameDashboard:
             self.window.blit(scaled_feed, (feed_x, feed_y))
 
             # Show FPS or other camera stats in the corner
-            time_since_update = time.time() - self.last_camera_update
-            if time_since_update < 1.0:  # Only show if recently updated
-                fps_text = self.fonts["small"].render(
-                    f"FPS: {1.0/max(0.001, time_since_update):.1f}", True, self.colors["text"]
-                )
-                self.window.blit(
-                    fps_text,
-                    (
-                        camera_rect.x + 10,
-                        camera_rect.y + camera_rect.height - fps_text.get_height() - 10,
-                    ),
-                )
+            if camera_connected:
+                current_time = time.time()
+
+                # Check if we have a new frame since last time
+                if self.camera_feed and hasattr(self, "last_frame_id"):
+                    # Only update FPS when we actually get a new frame
+                    current_frame_id = id(self.camera_feed)  # Use object ID to detect new frames
+
+                    if current_frame_id != self.last_frame_id:
+                        # We got a new frame! Update FPS calculation
+                        if hasattr(self, "frame_times"):
+                            self.frame_times.append(current_time)
+                            # Keep only recent frames for FPS calculation (last ~2 seconds)
+                            while self.frame_times and current_time - self.frame_times[0] > 2.0:
+                                self.frame_times.pop(0)
+
+                            # Calculate actual FPS based on frame count over time period
+                            if len(self.frame_times) > 1:
+                                time_span = self.frame_times[-1] - self.frame_times[0]
+                                if time_span > 0:
+                                    actual_fps = (len(self.frame_times) - 1) / time_span
+                                    fps_text = self.fonts["small"].render(
+                                        f"FPS: {actual_fps:.1f}", True, self.colors["text"]
+                                    )
+                                    self.window.blit(
+                                        fps_text,
+                                        (
+                                            camera_rect.x + 10,
+                                            camera_rect.y
+                                            + camera_rect.height
+                                            - fps_text.get_height()
+                                            - 10,
+                                        ),
+                                    )
+                        else:
+                            # Initialize frame tracking
+                            self.frame_times = [current_time]
+
+                        # Remember this frame
+                        self.last_frame_id = current_frame_id
+                else:
+                    # Initialize frame tracking
+                    self.last_frame_id = id(self.camera_feed) if self.camera_feed else None
+                    self.frame_times = [current_time] if self.camera_feed else []
         else:
             # Show placeholder text
-            if self.camera_connected:
+            if camera_connected:
                 placeholder_text = "Awaiting video stream..."
                 text_color = self.colors["text"]
             else:
-                placeholder_text = self.placeholder_camera_text
+                placeholder_text = self.camera_status_message
                 text_color = self.colors["text_secondary"]
 
             # Draw placeholder text
@@ -949,7 +1016,7 @@ class RasptankPygameDashboard:
             self.window.blit(text, text_rect)
 
             # Draw camera icon for visual appeal
-            if not self.camera_connected:
+            if not camera_connected:
                 # Draw stylized camera icon
                 icon_size = 48
                 icon_rect = pygame.Rect(
@@ -959,6 +1026,16 @@ class RasptankPygameDashboard:
                     icon_size,
                 )
                 self.draw_camera_icon(icon_rect)
+
+                # Show connection hint if having trouble connecting
+                if self.camera_connection_attempts >= 3:
+                    hint_text = self.fonts["small"].render(
+                        f"Camera server URL: {self.camera_server_url}", True, self.colors["yellow"]
+                    )
+                    hint_rect = hint_text.get_rect(
+                        centerx=camera_rect.centerx, top=camera_rect.centery + 40
+                    )
+                    self.window.blit(hint_text, hint_rect)
 
     def draw_camera_icon(self, rect):
         """Draw a stylized camera icon."""
@@ -1206,15 +1283,85 @@ class RasptankPygameDashboard:
         """
         self.movement_status.update(status)
 
+    def start_camera_feed(self):
+        """Initialize and start the camera feed."""
+        if not self.camera_client:
+            print("Camera client not initialized")
+            return
+
+        try:
+            print("Starting camera feed")
+            # Start continuous frame fetching
+            self.camera_client.start_continuous_frames()
+            self.camera_status_message = "Connecting to camera..."
+            print("Camera feed started")
+        except Exception as e:
+            print(f"Error starting camera feed: {e}")
+            self.camera_status_message = f"Camera error: {str(e)}"
+            self.camera_connected = False
+
+    def update_camera_feed_from_client(self):
+        """Fetch the latest frame from the camera client and update the display."""
+        if not self.camera_client:
+            return
+
+        try:
+            # Get frame as pygame surface with short age requirement for max freshness
+            surface = self.camera_client.get_frame_as_pygame_surface(max_age_seconds=0.05)
+
+            if surface:
+                self.camera_feed = surface
+                self.camera_connected = True
+
+                # Track frame rates and update times
+                current_time = time.time()
+                time_since_update = current_time - self.last_camera_update
+                self.last_camera_update = current_time
+
+                # Restart camera feed if it seems stalled
+                if time_since_update > 3.0:
+                    print("Camera feed seems stalled, restarting...")
+                    self.stop_camera_feed()
+                    self.start_camera_feed()
+
+            elif time.time() - self.last_camera_update > 5.0:
+                # If no frames for a while, increment connection attempts
+                self.camera_connection_attempts += 1
+                self.camera_status_message = "Waiting for camera feed..."
+
+                # After several attempts, try restarting the feed
+                if self.camera_connection_attempts % 3 == 0:
+                    print("No frames received, restarting camera feed...")
+                    self.stop_camera_feed()
+                    time.sleep(0.5)  # Short delay before reconnecting
+                    self.start_camera_feed()
+
+        except Exception as e:
+            print(f"Error updating camera feed: {e}")
+            if self.camera_connected:
+                self.camera_status_message = f"Camera error: {str(e)}"
+                self.camera_connected = False
+
     def update_camera_feed(self, surface=None):
-        """Update the camera feed display.
+        """Update the camera feed display manually.
 
         Args:
             surface (pygame.Surface, optional): Camera feed surface
         """
-        self.camera_feed = surface
-        self.camera_connected = surface is not None
-        self.last_camera_update = time.time()
+        if surface:
+            self.camera_feed = surface
+            self.camera_connected = True
+            self.last_camera_update = time.time()
+
+    def stop_camera_feed(self):
+        """Stop the camera feed and clean up resources."""
+        if self.camera_client:
+            try:
+                print("Stopping camera feed")
+                self.camera_client.stop_continuous_frames()
+                print("Camera feed stopped")
+            except Exception as e:
+                print(f"Error stopping camera feed: {e}")
 
     def close(self):
         """Close the dashboard and clean up resources."""
@@ -1226,6 +1373,9 @@ class RasptankPygameDashboard:
             end_time = time.time() + 1.5
             while time.time() < end_time and self.running:
                 self.update()
+
+        # Stop the camera feed
+        self.stop_camera_feed()
 
         self.running = False
 
