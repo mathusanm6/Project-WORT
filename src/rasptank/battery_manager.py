@@ -28,7 +28,7 @@ class BatteryManager:
     """
 
     BATTERY_STATE_FILE = "/tmp/rasptank_battery_state.json"
-    DEFAULT_DISCHARGE_RATE = 0.5  # % per hour
+    DEFAULT_DISCHARGE_RATE = 0.0005  # 0.5% per hour
     DEFAULT_BATTERY_PERCENTAGE = 100.0
     SAVE_THROTTLE_SECONDS = 60
 
