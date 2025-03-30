@@ -25,26 +25,24 @@ from src.common.enum.movement import (
     TurnType,
 )
 from src.common.logging.decorators import log_function_call
-from src.common.logging.logger_api import LogLevel
+from src.common.logging.logger_api import Logger, LogLevel
 from src.common.logging.logger_factory import LoggerFactory
 from src.common.mqtt.client import MQTTClient
 
 # Import from src.dashboard
 from src.dashboard.controller_adapter import ControllerAdapter
 from src.dashboard.dualsense.controller import DualSenseController
-
-# Import the Pygame Dashboard (create this file in src/dashboard/pygame_dashboard.py)
 from src.dashboard.pygame_dashboard import RasptankPygameDashboard
 
 # Global variables
-mqtt_client = None
-dualsense_controller = None
-movement_controller = None
-pygame_dashboard = None
+logger: Logger = None
+mqtt_client: MQTTClient = None
+dualsense_controller: DualSenseController = None
+controller_adapter: ControllerAdapter = None
+pygame_dashboard: RasptankPygameDashboard = None
 running = True
 tank_status = {"connected": False, "battery": 0, "power_source": "unknown", "last_update": 0}
 current_speed_mode = None
-logger = None
 
 
 def create_logger(log_level_str):
@@ -169,7 +167,7 @@ def handle_status_update(client, topic, payload, qos, retain):
         qos (int): QoS level
         retain (bool): Whether the message was retained
     """
-    global tank_status, movement_controller, logger
+    global tank_status, controller_adapter, logger
 
     try:
         # Parse the status message
@@ -297,7 +295,7 @@ def handle_game_event(client, topic, payload, qos, retain):
 # This function is kept for backwards compatibility but is not used when GUI is available
 def print_dashboard():
     """Print a simple text-based dashboard to the console."""
-    global tank_status, dualsense_controller, movement_controller
+    global tank_status, dualsense_controller, controller_adapter
 
     # Clear the screen (platform-dependent)
     print("\033c", end="")
@@ -329,8 +327,8 @@ def print_dashboard():
         )
 
         # Movement controller status
-        if movement_controller:
-            adapter_status = movement_controller.get_status()
+        if controller_adapter:
+            adapter_status = controller_adapter.get_status()
 
             global current_speed_mode
 
@@ -465,7 +463,7 @@ def parse_arguments():
 @log_function_call()
 def main():
     """Main entry point."""
-    global mqtt_client, dualsense_controller, movement_controller, running, logger, pygame_dashboard
+    global mqtt_client, dualsense_controller, controller_adapter, running, logger, pygame_dashboard
 
     # Parse command line arguments
     args = parse_arguments()
@@ -494,9 +492,9 @@ def main():
             controller_logger.debugw("Stopping pygame dashboard")
             pygame_dashboard.close()
 
-        if movement_controller:
+        if controller_adapter:
             controller_logger.debugw("Stopping movement controller")
-            movement_controller.stop()
+            controller_adapter.stop()
 
         if dualsense_controller:
             controller_logger.debugw("Cleaning up controller")
@@ -561,7 +559,7 @@ def main():
                     "Initializing controller movement adapter with new control scheme"
                 )
 
-                movement_controller = ControllerAdapter(
+                controller_adapter = ControllerAdapter(
                     controller_adapter_logger=controller_adapter_logger,
                     controller=dualsense_controller,
                     on_movement_command=send_movement_command,
@@ -636,12 +634,12 @@ def main():
             ):
                 controller_logger.infow("Attempting to reconnect DualSense controller")
                 if dualsense_controller.setup(max_retries=1):  # Only try once each time
-                    if movement_controller is None:
+                    if controller_adapter is None:
                         # Reinitialize movement controller after controller reconnection
                         controller_logger.infow(
                             "Initializing controller movement adapter after reconnection"
                         )
-                        movement_controller = ControllerAdapter(
+                        controller_adapter = ControllerAdapter(
                             controller_adapter_logger=controller_adapter_logger,
                             controller=dualsense_controller,
                             on_movement_command=send_movement_command,
@@ -658,8 +656,8 @@ def main():
                     if dualsense_controller:
                         pygame_dashboard.update_controller_status(dualsense_controller.get_status())
 
-                    if movement_controller:
-                        pygame_dashboard.update_movement_status(movement_controller.get_status())
+                    if controller_adapter:
+                        pygame_dashboard.update_movement_status(controller_adapter.get_status())
 
                     # Update the dashboard display (runs in main thread)
                     pygame_dashboard.update()

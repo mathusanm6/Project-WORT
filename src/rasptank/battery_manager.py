@@ -218,4 +218,4 @@ def setup_power_source_prompt(logger):
             return PowerSource.WIRED
     except Exception:
         logger.warnw("Error during power source selection, defaulting to wired")
-        return PowerSource.BATTERY
+        return PowerSource.WIRED
