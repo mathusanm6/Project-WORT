@@ -211,6 +211,31 @@ def handle_status_update(client, topic, payload, qos, retain):
         )
 
 
+def check_tank_connection_timeout():
+    """Check if tank connection has timed out due to no recent status messages."""
+    global tank_status, logger
+
+    # Define the timeout threshold (30 seconds)
+    CONNECTION_TIMEOUT_SECONDS = 30.0
+
+    # Only check if tank was previously marked as connected
+    if tank_status["connected"]:
+        # Get time since last update
+        time_since_update = time.time() - tank_status["last_update"]
+
+        # Check if we've exceeded the timeout
+        if time_since_update > CONNECTION_TIMEOUT_SECONDS:
+            # Mark tank as disconnected
+            tank_status["connected"] = False
+            logger.warnw(
+                "Tank connection timed out",
+                "seconds_since_last_update",
+                f"{time_since_update:.1f}",
+                "timeout_threshold",
+                f"{CONNECTION_TIMEOUT_SECONDS}",
+            )
+
+
 def handle_game_event(client, topic, payload, qos, retain):
     """Handle game events and provide feedback on the controller.
 
@@ -616,6 +641,8 @@ def main():
         last_dashboard_update = 0
         controller_retry_interval = 10.0  # seconds
         last_controller_retry = 0
+        connection_check_interval = 1.0  # Check connection status every second
+        last_connection_check = 0
 
         controller_logger.infow("Running with threaded controller polling")
 
@@ -646,6 +673,11 @@ def main():
                             on_action_command=send_action_command,
                         )
                 last_controller_retry = current_time
+
+            # Check tank connection status periodically
+            if current_time - last_connection_check >= connection_check_interval:
+                check_tank_connection_timeout()
+                last_connection_check = current_time
 
             # Update the dashboard periodically
             if current_time - last_dashboard_update >= dashboard_update_interval:
