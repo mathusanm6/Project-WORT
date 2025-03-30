@@ -21,6 +21,13 @@ app = Flask(__name__)
 camera_instance = None
 
 
+def get_camera():
+    global camera_instance
+    if camera_instance is None:
+        camera_instance = Camera()
+    return camera_instance
+
+
 @app.route("/")
 def index():
     """Video streaming home page."""
@@ -48,7 +55,6 @@ def gen(camera):
             prev_time = current_time
             print(f"FPS: {fps}")  # Print FPS to the console
 
-        # Make sure we use the correct multipart format that works in all browsers
         yield b"--frame\r\n"
         yield b"Content-Type: image/jpeg\r\n\r\n"
         yield frame
@@ -59,7 +65,7 @@ def gen(camera):
 def video_feed():
     """Video streaming route. Put this in the src attribute of an img tag."""
     return Response(
-        gen(Camera()),
+        gen(get_camera()),
         mimetype="multipart/x-mixed-replace; boundary=frame",
         headers={
             "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -72,17 +78,20 @@ def video_feed():
 @app.route("/latest_frame")
 def latest_frame():
     """Alternative endpoint that returns just the latest frame as JPEG."""
-    global camera_instance
-
-    # Initialize camera if not already done
-    if camera_instance is None:
-        camera_instance = Camera()
-
     # Get the latest frame
-    frame = camera_instance.get_frame()
+    frame = get_camera().get_frame()
 
     # Return as a regular JPEG response
     return Response(frame, mimetype="image/jpeg")
+
+
+@app.route("/read_qr")
+def read_qr():
+    """Endpoint to read QR codes from the current frame."""
+    camera = get_camera()
+    qr_codes = camera.read_qr_code()
+
+    return jsonify({"success": True, "qr_codes": qr_codes, "count": len(qr_codes)})
 
 
 if __name__ == "__main__":
