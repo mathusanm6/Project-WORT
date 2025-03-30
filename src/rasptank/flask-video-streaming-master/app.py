@@ -1,17 +1,21 @@
 #!/usr/bin/env python
 import os
+import time
 from importlib import import_module
 
-# Raspberry Pi camera module (requires picamera package)
-from camera_pi2 import Camera
 from flask import Flask, Response, render_template
 
-# import camera driver
-# if os.environ.get('CAMERA'):
-#     Camera = import_module('camera_' + os.environ['CAMERA']).Camera
-# else:
-#     from camera import Camera
+# Detect the environment (Raspberry Pi or PC)
+try:
+    # If the `picamera` module is available, assume we are on a Raspberry Pi
+    from camera_pi2 import Camera
 
+    print("Using Raspberry Pi camera")
+except ImportError:
+    # Otherwise, use a PC-compatible camera (e.g., OpenCV)
+    from camera import Camera
+
+    print("Using PC camera")
 
 app = Flask(__name__)
 
@@ -24,9 +28,26 @@ def index():
 
 def gen(camera):
     """Video streaming generator function."""
-    yield b"--frame\r\n"
+    prev_time = time.time()
+    frame_count = 0
+    fps = 0
+
     while True:
-        frame = camera.get_frame()
+        # Capture a frame with FPS displayed
+        frame = camera.get_frame(fps=fps)
+        frame_count += 1
+
+        # Calculate elapsed time
+        current_time = time.time()
+        elapsed_time = current_time - prev_time
+
+        if elapsed_time >= 1.0:  # Update FPS every second
+            fps = frame_count
+            frame_count = 0
+            prev_time = current_time
+            print(f"FPS: {fps}")  # Print FPS to the console
+
+        yield b"--frame\r\n"
         yield b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n--frame\r\n"
 
 

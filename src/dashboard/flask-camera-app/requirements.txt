@@ -1,4 +1,0 @@
-Flask==2.0.3
-opencv-python==4.5.3.20210927
-picamera==1.13
-numpy==1.21.2
