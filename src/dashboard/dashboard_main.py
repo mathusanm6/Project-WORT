@@ -334,8 +334,8 @@ def print_dashboard():
     print(f"Tank connected: {tank_status['connected']}")
     print(f"Power source:   {tank_status['power_source']}")
 
-    if tank_status["battery"] == "battery":
-        print(f"Battery level:  {tank_status['battery']}%")
+    if tank_status["power_source"] == "battery":
+        print(f"Battery:       {tank_status['battery']:.2f}%")
 
     if tank_status["last_update"] > 0:
         time_since_update = time.time() - tank_status["last_update"]
@@ -414,11 +414,6 @@ def print_dashboard():
     else:
         print("Controller:     Disabled")
 
-    print("\n-- CONTROL SCHEME --")
-    print("D-Pad:          Movement with spin turning")
-    print("Left Stick:     Movement with curve turning")
-    print("L1/R1:          Speed control using gears")
-    print("R2:             Shoot")
     if dualsense_controller and dualsense_controller.get_status().get("has_feedback", False):
         print("\n-- FEEDBACK SYSTEM ACTIVE --")
 
