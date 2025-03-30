@@ -1,8 +1,9 @@
 import io
-from PIL import Image
 import select
+
 import v4l2capture
 from base_camera import BaseCamera
+from PIL import Image
 
 
 class Camera(BaseCamera):
