@@ -3,7 +3,7 @@ import os
 import time
 from importlib import import_module
 
-from flask import Flask, Response, render_template
+from flask import Flask, Response, jsonify, render_template
 
 # Detect the environment (Raspberry Pi or PC)
 try:
@@ -18,6 +18,7 @@ except ImportError:
     print("Using PC camera")
 
 app = Flask(__name__)
+camera_instance = None
 
 
 @app.route("/")
@@ -47,14 +48,41 @@ def gen(camera):
             prev_time = current_time
             print(f"FPS: {fps}")  # Print FPS to the console
 
+        # Make sure we use the correct multipart format that works in all browsers
         yield b"--frame\r\n"
-        yield b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n--frame\r\n"
+        yield b"Content-Type: image/jpeg\r\n\r\n"
+        yield frame
+        yield b"\r\n"
 
 
 @app.route("/video_feed")
 def video_feed():
     """Video streaming route. Put this in the src attribute of an img tag."""
-    return Response(gen(Camera()), mimetype="multipart/x-mixed-replace; boundary=frame")
+    return Response(
+        gen(Camera()),
+        mimetype="multipart/x-mixed-replace; boundary=frame",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
+
+
+@app.route("/latest_frame")
+def latest_frame():
+    """Alternative endpoint that returns just the latest frame as JPEG."""
+    global camera_instance
+
+    # Initialize camera if not already done
+    if camera_instance is None:
+        camera_instance = Camera()
+
+    # Get the latest frame
+    frame = camera_instance.get_frame()
+
+    # Return as a regular JPEG response
+    return Response(frame, mimetype="image/jpeg")
 
 
 if __name__ == "__main__":
