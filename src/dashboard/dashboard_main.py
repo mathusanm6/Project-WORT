@@ -539,7 +539,9 @@ def main():
         # Initialize the pygame dashboard (if not disabled)
         if not args.no_gui:
             controller_logger.infow("Initializing Pygame dashboard")
-            pygame_dashboard = RasptankPygameDashboard()
+            pygame_dashboard = RasptankPygameDashboard(
+                dashboard_logger=controller_logger.with_component("pygame_dashboard")
+            )
             controller_logger.infow("Pygame dashboard initialized")
 
         # Initialize DualSense controller first
