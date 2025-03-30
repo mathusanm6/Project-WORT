@@ -155,7 +155,7 @@ def start_camera_server(camera_port=5000):
     current_dir = os.path.dirname(os.path.abspath(__file__))
 
     # Build the path to app.py
-    app_path = os.path.join(current_dir, "app.py")
+    app_path = os.path.join(current_dir, "flask-video-streaming-master", "app.py")
 
     # Check if app.py exists
     if not os.path.exists(app_path):
@@ -567,7 +567,7 @@ def main():
         # Start camera server if enabled
         if args.camera:
             if not start_camera_server(args.camera_port):
-                component_logger.warningw(
+                component_logger.warnw(
                     "Failed to start camera server, continuing without camera functionality"
                 )
 
