@@ -31,7 +31,7 @@ class BatteryManager:
     BATTERY_STATE_FILE = "/tmp/rasptank_battery_state.json"
 
     # Discharge settings
-    DRAIN_SECONDS = 5.0
+    DRAIN_SECONDS = 5.0  # Completely drain in 5 seconds
     DEFAULT_BATTERY_PERCENTAGE = 100.0
 
     # Minimum time between state saves to prevent excessive disk writes
@@ -72,9 +72,12 @@ class BatteryManager:
     def stop(self):
         """Stop the battery management thread."""
         self._running = False
-        if self._thread is not None:
-            self._thread.join(timeout=1.0)
+
+        # Save the state before shutting down
         self._save_state()
+
+        # No need to join the thread since it's a daemon thread
+        # The thread will be terminated when the program exits
         self.logger.infow(
             "Battery management system stopped",
             "battery_percentage",
@@ -146,52 +149,68 @@ class BatteryManager:
 
     def _battery_monitor_thread(self):
         """Background thread to check battery status and log it."""
+        last_percentage = 100.0
         while self._running:
-            if self.power_source == PowerSource.BATTERY:
-                with self._lock:
-                    # Get current battery percentage (this will update it too)
-                    percentage = self.get_battery_percentage()
+            try:
+                if self.power_source == PowerSource.BATTERY:
+                    with self._lock:
+                        # Get current battery percentage (this will update it too)
+                        percentage = self.get_battery_percentage()
 
-                    # Log progress at certain thresholds
-                    if percentage <= 80.0 and percentage > 79.0:
-                        self.logger.infow(
-                            "Battery at 80%",
-                            "elapsed_seconds",
-                            f"{time.time() - self.start_discharge_time:.1f}",
-                        )
-                    elif percentage <= 50.0 and percentage > 49.0:
-                        self.logger.infow(
-                            "Battery at 50%",
-                            "elapsed_seconds",
-                            f"{time.time() - self.start_discharge_time:.1f}",
-                        )
-                    elif percentage <= 20.0 and percentage > 19.0:
-                        self.logger.warnw(
-                            "Battery at 20%",
-                            "elapsed_seconds",
-                            f"{time.time() - self.start_discharge_time:.1f}",
-                        )
-                    elif percentage <= 10.0 and percentage > 9.0:
-                        self.logger.warnw(
-                            "Battery at 10%",
-                            "elapsed_seconds",
-                            f"{time.time() - self.start_discharge_time:.1f}",
-                        )
-                    elif percentage <= 0.0:
-                        # Just in case we haven't logged it yet
-                        self.logger.warnw(
-                            "Battery depleted",
-                            "elapsed_seconds",
-                            f"{time.time() - self.start_discharge_time:.1f}",
-                        )
+                        # Only log if the percentage has changed significantly
+                        if last_percentage - percentage >= 5.0:
+                            self.logger.infow(
+                                "Battery discharging",
+                                "battery_percentage",
+                                f"{percentage:.1f}%",
+                                "elapsed_seconds",
+                                f"{time.time() - self.start_discharge_time:.1f}",
+                            )
+                            last_percentage = percentage
 
-                    # Periodically save state to disk
-                    current_time = time.time()
-                    if current_time - self.last_save_time > self.SAVE_THROTTLE_SECONDS:
-                        self._save_state()
+                        # Log progress at certain thresholds
+                        if percentage <= 80.0 and percentage > 75.0:
+                            self.logger.infow(
+                                "Battery at ~80%",
+                                "elapsed_seconds",
+                                f"{time.time() - self.start_discharge_time:.1f}",
+                            )
+                        elif percentage <= 50.0 and percentage > 45.0:
+                            self.logger.infow(
+                                "Battery at ~50%",
+                                "elapsed_seconds",
+                                f"{time.time() - self.start_discharge_time:.1f}",
+                            )
+                        elif percentage <= 20.0 and percentage > 15.0:
+                            self.logger.warnw(
+                                "Battery at ~20%",
+                                "elapsed_seconds",
+                                f"{time.time() - self.start_discharge_time:.1f}",
+                            )
+                        elif percentage <= 10.0 and percentage > 5.0:
+                            self.logger.warnw(
+                                "Battery at ~10%",
+                                "elapsed_seconds",
+                                f"{time.time() - self.start_discharge_time:.1f}",
+                            )
+                        elif percentage <= 0.1:
+                            # Just in case we haven't logged it yet
+                            self.logger.warnw(
+                                "Battery depleted",
+                                "elapsed_seconds",
+                                f"{time.time() - self.start_discharge_time:.1f}",
+                            )
 
-            # Check every 0.5 seconds for more responsive updates
-            time.sleep(0.5)
+                        # Periodically save state to disk
+                        current_time = time.time()
+                        if current_time - self.last_save_time > self.SAVE_THROTTLE_SECONDS:
+                            self._save_state()
+            except Exception as e:
+                # Catch any exceptions to prevent thread from dying
+                self.logger.errorw("Error in battery monitor thread", "error", str(e))
+
+            # Check every 0.1 seconds for more responsive updates
+            time.sleep(0.1)
 
     def _save_state(self):
         """Save battery state to disk."""
