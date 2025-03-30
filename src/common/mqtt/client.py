@@ -37,7 +37,7 @@ class MQTTClient:
         """
         self.logger = mqtt_logger
 
-        self.logger.infow("Initializing MQTT client", "broker", broker_address, "port", broker_port)
+        # self.logger.infow("Initializing MQTT client", "broker", str(broker_address), "port", str(broker_port))
 
         # MQTT configuration
         self.broker_address = broker_address
@@ -79,9 +79,10 @@ class MQTTClient:
             bool: True if connection was initiated, False otherwise
         """
         try:
+            """
             self.logger.infow(
-                "Connecting to MQTT broker", "broker", self.broker_address, "port", self.broker_port
-            )
+                "Connecting to MQTT broker", "broker", str(self.broker_address), "port", str(self.broker_port)
+            )"""
 
             self.client.connect_async(
                 host=self.broker_address,
@@ -135,7 +136,7 @@ class MQTTClient:
             self.topic_handlers[topic] = callback
 
         if self.connected.is_set():
-            self.logger.infow("Subscribing to topic", "topic", topic, "qos", qos)
+            self.logger.infow("Subscribing to topic", "topic", topic, "qos", str(qos))
             self.client.subscribe(topic, qos)
         else:
             self.logger.warnw("Cannot subscribe to topic: Not connected", "topic", topic)
@@ -195,7 +196,7 @@ class MQTTClient:
     def _on_connect(self, client, userdata, flags, rc):
         """Callback for when the client connects to the broker."""
         if rc == 0:
-            self.logger.infow("Connected to MQTT broker", "rc", rc, "client_id", self.client_id)
+            # self.logger.infow("Connected to MQTT broker", "rc", str(rc), "client_id", self.client_id)
             self.connected.set()
 
             # Resubscribe to all topics

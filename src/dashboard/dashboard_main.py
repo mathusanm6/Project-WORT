@@ -13,10 +13,8 @@ import time
 
 import pygame
 
-from src.common.constants.actions import SCAN_COMMAND_TOPIC, SHOOT_COMMAND_TOPIC, ActionType
-
 # Import from src.common
-from src.common.constants.actions import SHOOT_COMMAND_TOPIC, ActionType
+from src.common.constants.actions import SCAN_COMMAND_TOPIC, SHOOT_COMMAND_TOPIC, ActionType
 from src.common.constants.game import GAME_EVENT_TOPIC, STATUS_TOPIC
 from src.common.constants.movement import MOVEMENT_COMMAND_TOPIC
 from src.common.enum.movement import (
@@ -197,9 +195,8 @@ def handle_status_update(client, topic, payload, qos, retain):
 
             elif status_type == "shot_fired":
                 logger.infow("Shot fired by the tank")
-
-            elif status_type == "camera_moved":
-                logger.debugw("Camera position updated")
+            elif status_type == "qr_code_scanning":
+                logger.infow("QR code scanning in progress")
             else:
                 logger.debugw("Received status update", "payload", payload)
 
