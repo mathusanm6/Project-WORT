@@ -7,6 +7,7 @@ to be controlled via MQTT from a PC with a DualSense controller.
 import argparse
 import os
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -50,6 +51,7 @@ mqtt_client: MQTTClient = None
 movement_controller: MQTTMovementController = None
 action_controller: ActionController = None
 running = True
+camera_process = None
 
 # Global variables for ongoing game
 team = None
@@ -95,6 +97,20 @@ def signal_handler(sig, frame):
 @log_function_call()
 def cleanup():
     """Clean up all resources."""
+    # Stop camera process if running
+    if camera_process:
+        try:
+            logger.infow("Stopping camera process")
+            camera_process.terminate()
+            camera_process.wait(timeout=5)
+        except Exception as e:
+            logger.errorw("Camera process cleanup failed", "error", str(e), exc_info=True)
+            # Force kill if terminate fails
+            try:
+                camera_process.kill()
+            except:
+                pass
+
     # Clean up battery manager
     if battery_manager:
         try:
@@ -127,6 +143,58 @@ def cleanup():
             mqtt_client.disconnect()
         except Exception as e:
             logger.errorw("MQTT client disconnect failed", "error", str(e), exc_info=True)
+
+
+def start_camera_server(camera_port=5000):
+    """Start the Flask camera server in a separate process."""
+    global camera_process
+
+    logger.infow("Starting camera server", "port", camera_port)
+
+    # Get the directory of the current script
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Build the path to app.py
+    app_path = os.path.join(current_dir, "app.py")
+
+    # Check if app.py exists
+    if not os.path.exists(app_path):
+        logger.errorw("Cannot find app.py", "path", app_path)
+        return False
+
+    # Start the Flask server as a subprocess
+    try:
+        camera_process = subprocess.Popen(
+            [sys.executable, app_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env={**os.environ, "FLASK_APP": app_path, "FLASK_RUN_PORT": str(camera_port)},
+        )
+
+        # Wait a moment to ensure the process starts
+        time.sleep(2)
+
+        # Check if process is running
+        if camera_process.poll() is not None:
+            # Process exited immediately, likely an error
+            stdout, stderr = camera_process.communicate()
+            logger.errorw(
+                "Camera server failed to start",
+                "returncode",
+                camera_process.returncode,
+                "stdout",
+                stdout.decode("utf-8", errors="ignore"),
+                "stderr",
+                stderr.decode("utf-8", errors="ignore"),
+            )
+            return False
+
+        logger.infow("Camera server started successfully", "pid", camera_process.pid)
+        return True
+
+    except Exception as e:
+        logger.errorw("Failed to start camera server", "error", str(e), exc_info=True)
+        return False
 
 
 @log_function_call()
@@ -417,6 +485,10 @@ def publish_status_update():
             # Add other status fields as needed
         }
 
+        # Add camera status if relevant
+        if camera_process:
+            status["camera_running"] = camera_process.poll() is None
+
         # Publish status information
         status_message = (
             f"status;{status['battery']};{status['power_source']};{status['timestamp']}"
@@ -457,8 +529,16 @@ def parse_arguments():
     )
 
     parser.add_argument("--client-id", type=str, default="rasptank", help="MQTT client ID")
+
     parser.add_argument(
         "--reset-battery", action="store_true", help="Reset battery to full charge (100%)"
+    )
+
+    # Add camera-related arguments
+    parser.add_argument("--camera", action="store_true", help="Enable camera functionality")
+
+    parser.add_argument(
+        "--camera-port", type=int, default=5000, help="Port for the camera web server"
     )
 
     return parser.parse_args()
@@ -467,7 +547,7 @@ def parse_arguments():
 @log_function_call()
 def main():
     """Main entry point."""
-    global rasptank_hardware, mqtt_client, movement_controller, action_controller, logger, battery_manager, tank_id
+    global rasptank_hardware, mqtt_client, movement_controller, action_controller, logger, battery_manager, tank_id, camera_process
 
     # Parse command line arguments
     args = parse_arguments()
@@ -484,6 +564,13 @@ def main():
 
     # Initialize resources
     try:
+        # Start camera server if enabled
+        if args.camera:
+            if not start_camera_server(args.camera_port):
+                component_logger.warningw(
+                    "Failed to start camera server, continuing without camera functionality"
+                )
+
         # Initialize MQTT Client
         mqtt_logger = logger.with_component("mqtt")
         mqtt_client = MQTTClient(
@@ -582,6 +669,23 @@ def main():
                 signal.signal(signal.SIGTERM, signal_handler)
 
             on_flag_area()
+
+            # Check camera process health if enabled
+            if args.camera and camera_process and camera_process.poll() is not None:
+                # Camera process has died, log the error
+                stdout, stderr = camera_process.communicate()
+                component_logger.errorw(
+                    "Camera process died unexpectedly",
+                    "returncode",
+                    camera_process.returncode,
+                    "stdout",
+                    stdout.decode("utf-8", errors="ignore"),
+                    "stderr",
+                    stderr.decode("utf-8", errors="ignore"),
+                )
+                # Attempt to restart
+                if start_camera_server(args.camera_port):
+                    component_logger.infow("Camera process successfully restarted")
 
             try:
                 command = rasptank_hardware.led_command_queue.get(timeout=0.1)
