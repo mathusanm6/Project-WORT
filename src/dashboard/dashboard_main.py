@@ -42,7 +42,7 @@ dualsense_controller = None
 movement_controller = None
 pygame_dashboard = None
 running = True
-tank_status = {"connected": False, "battery": 0, "last_update": 0}
+tank_status = {"connected": False, "battery": 0, "power_source": "unknown", "last_update": 0}
 current_speed_mode = None
 logger = None
 
@@ -181,14 +181,22 @@ def handle_status_update(client, topic, payload, qos, retain):
             if status_type == "status" and len(parts) >= 3:
                 # Update tank status
                 battery = int(parts[1])
-                timestamp = float(parts[2])
+                power_source = parts[2]
+                timestamp = float(parts[3])
 
                 tank_status["connected"] = True
                 tank_status["battery"] = battery
+                tank_status["power_source"] = power_source
                 tank_status["last_update"] = timestamp
 
                 logger.debugw(
-                    "Tank status updated", "battery", f"{battery}%", "timestamp", timestamp
+                    "Tank status updated",
+                    "battery",
+                    battery,
+                    "power_source",
+                    power_source,
+                    "timestamp",
+                    timestamp,
                 )
 
             elif status_type == "shot_fired":
@@ -301,7 +309,10 @@ def print_dashboard():
 
     # Tank status
     print(f"Tank connected: {tank_status['connected']}")
-    print(f"Battery level:  {tank_status['battery']}%")
+    print(f"Power source:   {tank_status['power_source']}")
+
+    if tank_status["battery"] == "battery":
+        print(f"Battery level:  {tank_status['battery']}%")
 
     if tank_status["last_update"] > 0:
         time_since_update = time.time() - tank_status["last_update"]
@@ -665,7 +676,7 @@ def main():
                     running = False
 
             # Sleep to avoid busy waiting
-            time.sleep(0.005)  # 5ms sleep
+            time.sleep(0.01)  # 10ms sleep to reduce CPU usage
 
     except Exception as e:
         controller_logger.errorw("Error in main loop", "error", str(e), exc_info=True)

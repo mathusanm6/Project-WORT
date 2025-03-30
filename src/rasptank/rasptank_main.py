@@ -248,7 +248,7 @@ def publish_status_update():
 
         # Publish status information
         status_message = (
-            f"status;{status['battery']};{status['timestamp']};{status['power_source']}"
+            f"status;{status['battery']};{status['power_source']};{status['timestamp']}"
         )
         mqtt_client.publish(STATUS_TOPIC, status_message, qos=0)
         logger.debugw(
