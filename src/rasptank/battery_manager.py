@@ -5,6 +5,7 @@ This module handles battery state tracking, persistence, and status reporting.
 
 import json
 import os
+import sys
 import threading
 import time
 from enum import Enum
@@ -232,20 +233,54 @@ class BatteryManager:
 
 
 def setup_power_source_prompt(logger):
-    """Prompt user to select power source at startup."""
-    print("\n===== Rasptank Power Source Configuration =====")
+    """Prompt user to select power source at startup with improved input handling."""
+
+    logger.infow("Prompting for power source configuration")
+
+    # Clear line for better visibility
+    print("\n\n===== Rasptank Power Source Configuration =====")
     print("Is the Rasptank running on batteries or connected to power?")
     print("1. Running on batteries")
     print("2. Connected to power (default)")
 
     try:
-        choice = input("Enter choice (1/2) [2]: ").strip()
+        # Explicitly flush stdout to ensure prompt is visible
+        sys.stdout.flush()
+
+        # Set a timeout for the input to prevent blocking indefinitely
+        import threading
+
+        result = {"choice": "2"}  # Default to wired
+
+        def get_input():
+            try:
+                # Use raw_input for Python 2 compatibility if needed
+                result["choice"] = input("Enter choice (1/2) [2]: ").strip()
+            except Exception as e:
+                logger.warnw("Error getting input", "error", str(e))
+
+        # Start input in a thread so we can time it out
+        input_thread = threading.Thread(target=get_input)
+        input_thread.daemon = True
+        input_thread.start()
+
+        # Wait up to 10 seconds for input
+        input_thread.join(10)
+
+        if input_thread.is_alive():
+            # Input timed out
+            logger.warnw("Power source input timed out, defaulting to wired")
+            print("\nInput timed out. Using default (wired power).")
+            return PowerSource.WIRED
+
+        # Process the choice
+        choice = result["choice"]
         if choice == "1":
             logger.infow("User selected battery power")
             return PowerSource.BATTERY
         else:
             logger.infow("User selected wired power")
             return PowerSource.WIRED
-    except Exception:
-        logger.warnw("Error during power source selection, defaulting to wired")
+    except Exception as e:
+        logger.warnw("Error during power source selection, defaulting to wired", "error", str(e))
         return PowerSource.WIRED
