@@ -239,13 +239,11 @@ class ControllerAdapter:
         # Scan qr code using the TRIANGLE button
         if button_name == ButtonType.CIRCLE.value and pressed:
             if self.on_action_command:
-                self.logger.info("Scan command sent")
+                self.logger.infow("Scan command sent")
                 self.on_action_command(ActionType.SCAN)
 
                 if self.has_feedback:
-                    self.controller.feedback_collection.on_shoot(
-                        *self.speed_modes[self.current_speed_mode_idx].color
-                    )
+                    self.controller.feedback_collection.on_shoot()
 
     def _update_active_dpad_movements(self):
         """Update any active D-pad movements with the current pivot mode and speed."""
