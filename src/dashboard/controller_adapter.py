@@ -239,7 +239,7 @@ class ControllerAdapter:
         # Scan qr code using the TRIANGLE button
         if button_name == ButtonType.CIRCLE.value and pressed:
             if self.on_action_command:
-                logger.info("Scan command sent")
+                self.logger.info("Scan command sent")
                 self.on_action_command(ActionType.SCAN)
 
                 if self.has_feedback:
