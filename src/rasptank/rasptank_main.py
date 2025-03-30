@@ -145,55 +145,160 @@ def cleanup():
             logger.errorw("MQTT client disconnect failed", "error", str(e), exc_info=True)
 
 
-def start_camera_server(camera_port=5000):
-    """Start the Flask camera server in a separate process."""
+def start_camera_server(camera_port=5000, debug_mode=False):
+    """
+    Start the Flask camera server in a separate process with improved logging.
+
+    Args:
+        camera_port: Port number for the Flask server
+        debug_mode: Whether to run Flask in debug mode
+
+    Returns:
+        bool: True if server started successfully, False otherwise
+    """
     global camera_process
 
-    logger.infow("Starting camera server", "port", camera_port)
+    # Create a component-specific logger for this function
+    camera_server_logger = logger.with_component("camera_server")
+    camera_server_logger.infow(
+        "Starting camera server",
+        "port",
+        camera_port,
+        "debug_mode",
+        debug_mode,
+        "timestamp",
+        time.time(),
+    )
 
     # Get the directory of the current script
     current_dir = os.path.dirname(os.path.abspath(__file__))
 
     # Build the path to app.py
     app_path = os.path.join(current_dir, "flask-video-streaming-master", "app.py")
+    camera_server_logger.debugw("Resolved app path", "path", app_path)
 
     # Check if app.py exists
     if not os.path.exists(app_path):
-        logger.errorw("Cannot find app.py", "path", app_path)
+        camera_server_logger.errorw(
+            "Cannot find app.py", "path", app_path, "working_dir", os.getcwd()
+        )
         return False
+
+    # Set up environment variables for Flask
+    env_vars = {
+        **os.environ,
+        "FLASK_APP": app_path,
+        "FLASK_RUN_PORT": str(camera_port),
+        "FLASK_DEBUG": "1" if debug_mode else "0",
+        # Pass the logging configuration to the child process
+        "CAMERA_LOGGER_TYPE": os.environ.get("RASPTANK_LOGGER_TYPE", "console"),
+        "CAMERA_LOG_LEVEL": str(logger.logger.level),  # Convert to string to avoid TypeError
+    }
+
+    camera_server_logger.debugw(
+        "Prepared environment variables",
+        "flask_app",
+        env_vars["FLASK_APP"],
+        "flask_port",
+        env_vars["FLASK_RUN_PORT"],
+        "flask_debug",
+        env_vars["FLASK_DEBUG"],
+    )
 
     # Start the Flask server as a subprocess
     try:
+        start_time = time.time()
+        camera_server_logger.infow("Launching camera server subprocess")
+
+        # Pass through stdout/stderr for real-time logging in the parent terminal
         camera_process = subprocess.Popen(
             [sys.executable, app_path],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env={**os.environ, "FLASK_APP": app_path, "FLASK_RUN_PORT": str(camera_port)},
+            # No stdout/stderr redirection - will appear in same terminal
+            env=env_vars,
         )
 
+        # No need to capture and log stdout/stderr as they're now visible in the terminal
+        camera_server_logger.infow("Camera server logs will appear in this terminal")
+
         # Wait a moment to ensure the process starts
-        time.sleep(2)
+        wait_time = 3  # A bit longer for more reliable startup detection
+        camera_server_logger.debugw("Waiting for server startup", "wait_seconds", wait_time)
+        time.sleep(wait_time)
 
         # Check if process is running
         if camera_process.poll() is not None:
             # Process exited immediately, likely an error
-            stdout, stderr = camera_process.communicate()
-            logger.errorw(
+            camera_server_logger.errorw(
                 "Camera server failed to start",
                 "returncode",
                 camera_process.returncode,
-                "stdout",
-                stdout.decode("utf-8", errors="ignore"),
-                "stderr",
-                stderr.decode("utf-8", errors="ignore"),
+                "startup_time",
+                f"{time.time() - start_time:.2f}s",
             )
             return False
 
-        logger.infow("Camera server started successfully", "pid", camera_process.pid)
-        return True
+        # Process health check
+        if hasattr(camera_process, "pid") and camera_process.pid:
+            camera_server_logger.infow(
+                "Camera server started successfully",
+                "pid",
+                camera_process.pid,
+                "startup_time",
+                f"{time.time() - start_time:.2f}s",
+            )
+
+            # Set up a periodic health check for the camera server
+            def health_check():
+                try:
+                    # Make sure the process is still running
+                    if camera_process and camera_process.poll() is None:
+                        health_logger = logger.with_component("camera_health")
+                        health_logger.debugw(
+                            "Camera server health check",
+                            "pid",
+                            camera_process.pid,
+                            "status",
+                            "running",
+                            "uptime",
+                            f"{time.time() - start_time:.1f}s",
+                        )
+
+                        # Schedule next check if still running
+                        threading.Timer(30.0, health_check).start()
+                    else:
+                        # Process has died
+                        health_logger = logger.with_component("camera_health")
+                        health_logger.warnw(
+                            "Camera server process died",
+                            "pid",
+                            camera_process.pid if camera_process else None,
+                            "uptime",
+                            f"{time.time() - start_time:.1f}s",
+                        )
+                except Exception as e:
+                    logger.errorw("Error in health check", "error", str(e), exc_info=True)
+
+            # Start first health check after 30 seconds
+            threading.Timer(30.0, health_check).start()
+
+            return True
+        else:
+            camera_server_logger.errorw(
+                "Camera server process exists but has no PID",
+                "startup_time",
+                f"{time.time() - start_time:.2f}s",
+            )
+            return False
 
     except Exception as e:
-        logger.errorw("Failed to start camera server", "error", str(e), exc_info=True)
+        camera_server_logger.errorw(
+            "Failed to start camera server",
+            "error",
+            str(e),
+            "error_type",
+            type(e).__name__,
+            exc_info=True,
+        )
         return False
 
 
@@ -558,6 +663,8 @@ def main():
     component_logger = logger.with_component("main")
     component_logger.infow("Starting Rasptank main application")
 
+    camera_logger = component_logger.with_component("camera")
+
     # Setup signal handlers
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
@@ -567,12 +674,12 @@ def main():
         # Start camera server if enabled
         if args.camera:
             if not start_camera_server(args.camera_port):
-                component_logger.warnw(
+                camera_logger.warnw(
                     "Failed to start camera server, continuing without camera functionality"
                 )
 
         # Initialize MQTT Client
-        mqtt_logger = logger.with_component("mqtt")
+        mqtt_logger = component_logger.with_component("mqtt")
         mqtt_client = MQTTClient(
             mqtt_logger=mqtt_logger,
             broker_address=args.broker,
@@ -585,7 +692,7 @@ def main():
             return 1
 
         # Initialize Battery Manager (add after other initializations)
-        battery_logger = logger.with_component("battery")
+        battery_logger = component_logger.with_component("battery")
         battery_manager = BatteryManager(battery_logger)
 
         if args.reset_battery:
@@ -600,13 +707,13 @@ def main():
         battery_manager.start()
 
         # Initialize Rasptank Hardware
-        hw_logger = logger.with_component("hardware")
+        hw_logger = component_logger.with_component("hardware")
         rasptank_hardware = RasptankHardware(hw_logger)
 
         time.sleep(0.2)  # hardware initialization pause
 
         # Initialize MQTT Movement Controller
-        movement_logger = logger.with_component("movement")
+        movement_logger = component_logger.with_component("movement")
         movement_controller = MQTTMovementController(
             movement_logger=movement_logger,
             hardware=rasptank_hardware,
@@ -616,7 +723,7 @@ def main():
         )
 
         # Initialize Action Controller
-        action_logger = logger.with_component("action")
+        action_logger = component_logger.with_component("action")
         action_controller = ActionController(action_logger, rasptank_hardware)
 
         # IR Receiver setup
