@@ -40,7 +40,7 @@ from src.common.mqtt.client import MQTTClient
 
 # Import from src.rasptank
 from src.rasptank.action import ActionController
-from src.rasptank.battery_manager import BatteryManager, PowerSource, setup_power_source_prompt
+from src.rasptank.battery_manager import BatteryManager, PowerSource
 from src.rasptank.hardware.hardware_main import RasptankHardware
 from src.rasptank.movement.controller.mqtt import MQTTMovementController
 
@@ -682,6 +682,14 @@ def parse_arguments():
         "--camera-port", type=int, default=5000, help="Port for the camera web server"
     )
 
+    parser.add_argument(
+        "--power-source",
+        type=str,
+        choices=["battery", "wired"],
+        default="wired",
+        help="Power source for the Rasptank: 'battery' or 'wired'",
+    )
+
     return parser.parse_args()
 
 
@@ -736,7 +744,7 @@ def main():
             battery_manager.reset_battery()
 
         # Prompt user for power source
-        power_source = setup_power_source_prompt(battery_logger)
+        power_source = PowerSource.BATTERY if args.power_source == "battery" else PowerSource.WIRED
         battery_manager.set_power_source(power_source)
 
         # Start battery manager
