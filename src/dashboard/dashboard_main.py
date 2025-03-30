@@ -25,26 +25,24 @@ from src.common.enum.movement import (
     TurnType,
 )
 from src.common.logging.decorators import log_function_call
-from src.common.logging.logger_api import LogLevel
+from src.common.logging.logger_api import Logger, LogLevel
 from src.common.logging.logger_factory import LoggerFactory
 from src.common.mqtt.client import MQTTClient
 
 # Import from src.dashboard
 from src.dashboard.controller_adapter import ControllerAdapter
 from src.dashboard.dualsense.controller import DualSenseController
-
-# Import the Pygame Dashboard (create this file in src/dashboard/pygame_dashboard.py)
 from src.dashboard.pygame_dashboard import RasptankPygameDashboard
 
 # Global variables
-mqtt_client = None
-dualsense_controller = None
-movement_controller = None
-pygame_dashboard = None
+logger: Logger = None
+mqtt_client: MQTTClient = None
+dualsense_controller: DualSenseController = None
+controller_adapter: ControllerAdapter = None
+pygame_dashboard: RasptankPygameDashboard = None
 running = True
-tank_status = {"connected": False, "battery": 0, "last_update": 0}
+tank_status = {"connected": False, "battery": 0, "power_source": "unknown", "last_update": 0}
 current_speed_mode = None
-logger = None
 
 
 def create_logger(log_level_str):
@@ -169,7 +167,7 @@ def handle_status_update(client, topic, payload, qos, retain):
         qos (int): QoS level
         retain (bool): Whether the message was retained
     """
-    global tank_status, movement_controller, logger
+    global tank_status, controller_adapter, logger
 
     try:
         # Parse the status message
@@ -180,15 +178,23 @@ def handle_status_update(client, topic, payload, qos, retain):
 
             if status_type == "status" and len(parts) >= 3:
                 # Update tank status
-                battery = int(parts[1])
-                timestamp = float(parts[2])
+                battery = float(parts[1])
+                power_source = parts[2]
+                timestamp = float(parts[3])
 
                 tank_status["connected"] = True
                 tank_status["battery"] = battery
+                tank_status["power_source"] = power_source
                 tank_status["last_update"] = timestamp
 
                 logger.debugw(
-                    "Tank status updated", "battery", f"{battery}%", "timestamp", timestamp
+                    "Tank status updated",
+                    "battery",
+                    battery,
+                    "power_source",
+                    power_source,
+                    "timestamp",
+                    timestamp,
                 )
 
             elif status_type == "shot_fired":
@@ -203,6 +209,31 @@ def handle_status_update(client, topic, payload, qos, retain):
         logger.errorw(
             "Error handling status update", "error", str(e), "payload", payload, exc_info=True
         )
+
+
+def check_tank_connection_timeout():
+    """Check if tank connection has timed out due to no recent status messages."""
+    global tank_status, logger
+
+    # Define the timeout threshold (30 seconds)
+    CONNECTION_TIMEOUT_SECONDS = 15.0
+
+    # Only check if tank was previously marked as connected
+    if tank_status["connected"]:
+        # Get time since last update
+        time_since_update = time.time() - tank_status["last_update"]
+
+        # Check if we've exceeded the timeout
+        if time_since_update > CONNECTION_TIMEOUT_SECONDS:
+            # Mark tank as disconnected
+            tank_status["connected"] = False
+            logger.warnw(
+                "Tank connection timed out",
+                "seconds_since_last_update",
+                f"{time_since_update:.1f}",
+                "timeout_threshold",
+                f"{CONNECTION_TIMEOUT_SECONDS}",
+            )
 
 
 def handle_game_event(client, topic, payload, qos, retain):
@@ -289,7 +320,7 @@ def handle_game_event(client, topic, payload, qos, retain):
 # This function is kept for backwards compatibility but is not used when GUI is available
 def print_dashboard():
     """Print a simple text-based dashboard to the console."""
-    global tank_status, dualsense_controller, movement_controller
+    global tank_status, dualsense_controller, controller_adapter
 
     # Clear the screen (platform-dependent)
     print("\033c", end="")
@@ -301,7 +332,10 @@ def print_dashboard():
 
     # Tank status
     print(f"Tank connected: {tank_status['connected']}")
-    print(f"Battery level:  {tank_status['battery']}%")
+    print(f"Power source:   {tank_status['power_source']}")
+
+    if tank_status["power_source"] == "battery":
+        print(f"Battery:       {tank_status['battery']:.2f}%")
 
     if tank_status["last_update"] > 0:
         time_since_update = time.time() - tank_status["last_update"]
@@ -318,8 +352,8 @@ def print_dashboard():
         )
 
         # Movement controller status
-        if movement_controller:
-            adapter_status = movement_controller.get_status()
+        if controller_adapter:
+            adapter_status = controller_adapter.get_status()
 
             global current_speed_mode
 
@@ -380,11 +414,6 @@ def print_dashboard():
     else:
         print("Controller:     Disabled")
 
-    print("\n-- CONTROL SCHEME --")
-    print("D-Pad:          Movement with spin turning")
-    print("Left Stick:     Movement with curve turning")
-    print("L1/R1:          Speed control using gears")
-    print("R2:             Shoot")
     if dualsense_controller and dualsense_controller.get_status().get("has_feedback", False):
         print("\n-- FEEDBACK SYSTEM ACTIVE --")
 
@@ -454,7 +483,7 @@ def parse_arguments():
 @log_function_call()
 def main():
     """Main entry point."""
-    global mqtt_client, dualsense_controller, movement_controller, running, logger, pygame_dashboard
+    global mqtt_client, dualsense_controller, controller_adapter, running, logger, pygame_dashboard
 
     # Parse command line arguments
     args = parse_arguments()
@@ -483,9 +512,9 @@ def main():
             controller_logger.debugw("Stopping pygame dashboard")
             pygame_dashboard.close()
 
-        if movement_controller:
+        if controller_adapter:
             controller_logger.debugw("Stopping movement controller")
-            movement_controller.stop()
+            controller_adapter.stop()
 
         if dualsense_controller:
             controller_logger.debugw("Cleaning up controller")
@@ -550,7 +579,7 @@ def main():
                     "Initializing controller movement adapter with new control scheme"
                 )
 
-                movement_controller = ControllerAdapter(
+                controller_adapter = ControllerAdapter(
                     controller_adapter_logger=controller_adapter_logger,
                     controller=dualsense_controller,
                     on_movement_command=send_movement_command,
@@ -607,6 +636,8 @@ def main():
         last_dashboard_update = 0
         controller_retry_interval = 10.0  # seconds
         last_controller_retry = 0
+        connection_check_interval = 1.0  # Check connection status every second
+        last_connection_check = 0
 
         controller_logger.infow("Running with threaded controller polling")
 
@@ -625,18 +656,23 @@ def main():
             ):
                 controller_logger.infow("Attempting to reconnect DualSense controller")
                 if dualsense_controller.setup(max_retries=1):  # Only try once each time
-                    if movement_controller is None:
+                    if controller_adapter is None:
                         # Reinitialize movement controller after controller reconnection
                         controller_logger.infow(
                             "Initializing controller movement adapter after reconnection"
                         )
-                        movement_controller = ControllerAdapter(
+                        controller_adapter = ControllerAdapter(
                             controller_adapter_logger=controller_adapter_logger,
                             controller=dualsense_controller,
                             on_movement_command=send_movement_command,
                             on_action_command=send_action_command,
                         )
                 last_controller_retry = current_time
+
+            # Check tank connection status periodically
+            if current_time - last_connection_check >= connection_check_interval:
+                check_tank_connection_timeout()
+                last_connection_check = current_time
 
             # Update the dashboard periodically
             if current_time - last_dashboard_update >= dashboard_update_interval:
@@ -647,8 +683,8 @@ def main():
                     if dualsense_controller:
                         pygame_dashboard.update_controller_status(dualsense_controller.get_status())
 
-                    if movement_controller:
-                        pygame_dashboard.update_movement_status(movement_controller.get_status())
+                    if controller_adapter:
+                        pygame_dashboard.update_movement_status(controller_adapter.get_status())
 
                     # Update the dashboard display (runs in main thread)
                     pygame_dashboard.update()
@@ -665,7 +701,7 @@ def main():
                     running = False
 
             # Sleep to avoid busy waiting
-            time.sleep(0.005)  # 5ms sleep
+            time.sleep(0.01)  # 10ms sleep to reduce CPU usage
 
     except Exception as e:
         controller_logger.errorw("Error in main loop", "error", str(e), exc_info=True)

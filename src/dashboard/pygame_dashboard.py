@@ -115,7 +115,12 @@ class RasptankPygameDashboard:
         self.shutdown_start_time = 0
 
         # State variables
-        self.tank_status = {"connected": False, "battery": 0, "last_update": 0}
+        self.tank_status = {
+            "connected": False,
+            "battery": 0,
+            "power_source": None,
+            "last_update": 0,
+        }
         self.controller_status = {"connected": False, "has_feedback": False}
         self.movement_status = {
             "current_speed_mode": SpeedMode.GEAR_1,
@@ -420,118 +425,157 @@ class RasptankPygameDashboard:
             conn_value, (body_rect.x + rect.width - conn_value.get_width() - 20, body_rect.y + 20)
         )
 
-        # Battery level with gradient color
-        battery_pct = self.tank_status["battery"]
-        battery_color = self.get_battery_color(battery_pct)
+        if self.tank_status["connected"]:
+            if self.tank_status["power_source"] == "battery":
+                # Battery level with gradient color
+                battery_pct = self.tank_status["battery"]
+                battery_color = self.get_battery_color(battery_pct)
 
-        batt_label = self.fonts["normal"].render("Battery:", True, self.colors["text"])
-        batt_value = self.fonts["normal"].render(f"{battery_pct}%", True, battery_color)
+                batt_label = self.fonts["normal"].render("Battery:", True, self.colors["text"])
+                batt_value = self.fonts["normal"].render(f"{battery_pct}%", True, battery_color)
 
-        self.window.blit(batt_label, (body_rect.x + 20, body_rect.y + 55))
-        self.window.blit(
-            batt_value, (body_rect.x + rect.width - batt_value.get_width() - 20, body_rect.y + 55)
-        )
-
-        # Battery progress bar with gradient
-        bar_rect = pygame.Rect(body_rect.x + 20, body_rect.y + 85, body_rect.width - 40, 18)
-
-        # Background
-        self.draw_rounded_rect(bar_rect, self.colors["joystick_bg"], 4)
-
-        # Foreground (if battery level > 0)
-        if battery_pct > 0:
-            fill_width = int((body_rect.width - 40) * (battery_pct / 100))
-            fill_rect = pygame.Rect(bar_rect.x, bar_rect.y, fill_width, bar_rect.height)
-
-            # Create gradient from red to green based on battery level
-            if battery_pct <= 20:
-                # Red pulsing when critical
-                alpha = int(200 + 55 * self.pulse_effect) if battery_pct <= 10 else 255
-                self.draw_gradient_rect(
-                    fill_rect,
-                    (self.colors["red"][0], self.colors["red"][1], self.colors["red"][2], alpha),
-                    (
-                        min(255, self.colors["red"][0] + 30),
-                        min(255, self.colors["red"][1] + 30),
-                        min(255, self.colors["red"][2] + 30),
-                        alpha,
-                    ),
-                    vertical=False,
-                    border_radius=4,
+                self.window.blit(batt_label, (body_rect.x + 20, body_rect.y + 55))
+                self.window.blit(
+                    batt_value,
+                    (body_rect.x + rect.width - batt_value.get_width() - 20, body_rect.y + 55),
                 )
-            elif battery_pct <= 50:
-                # Yellow to green gradient
-                self.draw_gradient_rect(
-                    fill_rect,
-                    (
-                        self.colors["yellow"][0],
-                        self.colors["yellow"][1],
-                        self.colors["yellow"][2],
-                        255,
-                    ),
-                    (
-                        self.colors["green"][0],
-                        self.colors["green"][1],
-                        self.colors["green"][2],
-                        255,
-                    ),
-                    vertical=False,
-                    border_radius=4,
+
+                # Battery progress bar with gradient
+                bar_rect = pygame.Rect(body_rect.x + 20, body_rect.y + 85, body_rect.width - 40, 18)
+
+                # Background
+                self.draw_rounded_rect(bar_rect, self.colors["joystick_bg"], 4)
+
+                # Foreground (if battery level > 0)
+                if battery_pct > 0:
+                    fill_width = int((body_rect.width - 40) * (battery_pct / 100))
+                    fill_rect = pygame.Rect(bar_rect.x, bar_rect.y, fill_width, bar_rect.height)
+
+                    # Create gradient from red to green based on battery level
+                    if battery_pct <= 20:
+                        # Red pulsing when critical
+                        alpha = int(200 + 55 * self.pulse_effect) if battery_pct <= 10 else 255
+                        self.draw_gradient_rect(
+                            fill_rect,
+                            (
+                                self.colors["red"][0],
+                                self.colors["red"][1],
+                                self.colors["red"][2],
+                                alpha,
+                            ),
+                            (
+                                min(255, self.colors["red"][0] + 30),
+                                min(255, self.colors["red"][1] + 30),
+                                min(255, self.colors["red"][2] + 30),
+                                alpha,
+                            ),
+                            vertical=False,
+                            border_radius=4,
+                        )
+                    elif battery_pct <= 50:
+                        # Yellow to green gradient
+                        self.draw_gradient_rect(
+                            fill_rect,
+                            (
+                                self.colors["yellow"][0],
+                                self.colors["yellow"][1],
+                                self.colors["yellow"][2],
+                                255,
+                            ),
+                            (
+                                self.colors["green"][0],
+                                self.colors["green"][1],
+                                self.colors["green"][2],
+                                255,
+                            ),
+                            vertical=False,
+                            border_radius=4,
+                        )
+                    else:
+                        # Green gradient
+                        self.draw_gradient_rect(
+                            fill_rect,
+                            (
+                                self.colors["green"][0],
+                                self.colors["green"][1],
+                                self.colors["green"][2],
+                                255,
+                            ),
+                            (
+                                min(255, self.colors["green"][0] + 30),
+                                min(255, self.colors["green"][1] + 30),
+                                min(255, self.colors["green"][2] + 30),
+                                255,
+                            ),
+                            vertical=False,
+                            border_radius=4,
+                        )
+            else:
+                # Power source is not battery
+                batt_label = self.fonts["normal"].render("Power Source:", True, self.colors["text"])
+                batt_value = self.fonts["normal"].render(
+                    self.tank_status["power_source"].capitalize(), True, self.colors["text"]
+                )
+
+                self.window.blit(batt_label, (body_rect.x + 20, body_rect.y + 55))
+                self.window.blit(
+                    batt_value,
+                    (body_rect.x + rect.width - batt_value.get_width() - 20, body_rect.y + 55),
+                )
+
+            # Last update time with subtle pulsing for recent updates
+            last_update = self.tank_status["last_update"]
+            if last_update > 0:
+                time_since_update = time.time() - last_update
+                update_text = f"{time_since_update:.1f} seconds ago"
+
+                # Text gets darker the longer since last update
+                alpha = max(120, 255 - min(135, int(time_since_update * 5)))
+                text_color = (
+                    self.colors["text"][0],
+                    self.colors["text"][1],
+                    self.colors["text"][2],
+                    alpha,
+                )
+
+                # Recent updates pulse slightly
+                if time_since_update < 5:
+                    text_color = (
+                        min(255, self.colors["text"][0] + int(20 * self.pulse_effect)),
+                        min(255, self.colors["text"][1] + int(20 * self.pulse_effect)),
+                        min(255, self.colors["text"][2] + int(20 * self.pulse_effect)),
+                    )
+            else:
+                update_text = "Never"
+                text_color = self.colors["text_secondary"]
+
+            update_label = self.fonts["normal"].render("Last Update:", True, self.colors["text"])
+            update_value = self.fonts["normal"].render(update_text, True, text_color)
+
+            if self.tank_status["power_source"] == "battery":
+                self.window.blit(update_label, (body_rect.x + 20, body_rect.y + 120))
+                self.window.blit(
+                    update_value,
+                    (body_rect.x + rect.width - update_value.get_width() - 20, body_rect.y + 120),
                 )
             else:
-                # Green gradient
-                self.draw_gradient_rect(
-                    fill_rect,
-                    (
-                        self.colors["green"][0],
-                        self.colors["green"][1],
-                        self.colors["green"][2],
-                        255,
-                    ),
-                    (
-                        min(255, self.colors["green"][0] + 30),
-                        min(255, self.colors["green"][1] + 30),
-                        min(255, self.colors["green"][2] + 30),
-                        255,
-                    ),
-                    vertical=False,
-                    border_radius=4,
-                )
-
-        # Last update time with subtle pulsing for recent updates
-        last_update = self.tank_status["last_update"]
-        if last_update > 0:
-            time_since_update = time.time() - last_update
-            update_text = f"{time_since_update:.1f} seconds ago"
-
-            # Text gets darker the longer since last update
-            alpha = max(120, 255 - min(135, int(time_since_update * 5)))
-            text_color = (
-                self.colors["text"][0],
-                self.colors["text"][1],
-                self.colors["text"][2],
-                alpha,
-            )
-
-            # Recent updates pulse slightly
-            if time_since_update < 5:
-                text_color = (
-                    min(255, self.colors["text"][0] + int(20 * self.pulse_effect)),
-                    min(255, self.colors["text"][1] + int(20 * self.pulse_effect)),
-                    min(255, self.colors["text"][2] + int(20 * self.pulse_effect)),
+                self.window.blit(update_label, (body_rect.x + 20, body_rect.y + 90))
+                self.window.blit(
+                    update_value,
+                    (body_rect.x + rect.width - update_value.get_width() - 20, body_rect.y + 90),
                 )
         else:
-            update_text = "Never"
-            text_color = self.colors["text_secondary"]
-
-        update_label = self.fonts["normal"].render("Last Update:", True, self.colors["text"])
-        update_value = self.fonts["normal"].render(update_text, True, text_color)
-
-        self.window.blit(update_label, (body_rect.x + 20, body_rect.y + 120))
-        self.window.blit(
-            update_value,
-            (body_rect.x + rect.width - update_value.get_width() - 20, body_rect.y + 120),
-        )
+            # If not connected, show a message
+            disconnected_text = self.fonts["normal"].render(
+                "Tank not connected", True, self.colors["text_secondary"]
+            )
+            self.window.blit(
+                disconnected_text,
+                (
+                    body_rect.x + (body_rect.width - disconnected_text.get_width()) // 2,
+                    body_rect.y + 60,
+                ),
+            )
 
     def draw_controller_status_section(self):
         """Draw the controller status section."""
