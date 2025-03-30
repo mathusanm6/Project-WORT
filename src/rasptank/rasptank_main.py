@@ -17,24 +17,26 @@ from src.common.constants.actions import SHOOT_COMMAND_TOPIC
 from src.common.constants.game import FLAG_CAPTURE_DURATION, GAME_EVENT_TOPIC, STATUS_TOPIC
 from src.common.constants.movement import MOVEMENT_COMMAND_TOPIC, MOVEMENT_STATE_TOPIC
 from src.common.logging.decorators import log_function_call
-from src.common.logging.logger_api import LogLevel
 
 # Import from logging system
+from src.common.logging.logger_api import Logger, LogLevel
 from src.common.logging.logger_factory import LoggerFactory
 from src.common.mqtt.client import MQTTClient
 
 # Import from src.rasptank
 from src.rasptank.action import ActionController
+from src.rasptank.battery_manager import BatteryManager, PowerSource, setup_power_source_prompt
 from src.rasptank.hardware.hardware_main import RasptankHardware
 from src.rasptank.movement.controller.mqtt import MQTTMovementController
 
 # Global variables for resources that need cleanup
-rasptank_hardware = None
-mqtt_client = None
-movement_controller = None
-action_controller = None
+logger: Logger = None
+battery_manager: BatteryManager = None
+rasptank_hardware: RasptankHardware = None
+mqtt_client: MQTTClient = None
+movement_controller: MQTTMovementController = None
+action_controller: ActionController = None
 running = True
-logger = None
 
 
 def create_logger(log_level_str):
@@ -71,7 +73,15 @@ def signal_handler(sig, frame):
 @log_function_call()
 def cleanup():
     """Clean up all resources."""
-    global mqtt_client, movement_controller, action_controller, rasptank_hardware
+    global mqtt_client, movement_controller, action_controller, rasptank_hardware, battery_manager
+
+    # Clean up battery manager
+    if battery_manager:
+        try:
+            logger.infow("Stopping battery manager")
+            battery_manager.stop()
+        except Exception as e:
+            logger.errorw("Battery manager cleanup failed", "error", str(e), exc_info=True)
 
     # Clean up movement controller
     if movement_controller:
@@ -121,33 +131,6 @@ def handle_shoot_command(client, topic, payload, qos, retain):
 
     except Exception as e:
         logger.errorw("Error handling shoot command", "error", str(e), exc_info=True)
-
-
-@log_function_call()
-def handle_camera_command(client, topic, payload, qos, retain):
-    """Handle camera control commands received via MQTT."""
-    try:
-        logger.debugw("Camera command received", "payload", payload)
-
-        # Parse pan and tilt values
-        parts = payload.split(";")
-        if len(parts) >= 2:
-            try:
-                pan = float(parts[0])
-                tilt = float(parts[1])
-
-                # TODO: Implement actual camera servo control
-                logger.debugw("Moving camera", "pan", pan, "tilt", tilt)
-
-                # Publish confirmation
-                client.publish(STATUS_TOPIC, f"camera_moved;{pan};{tilt}", qos=0)
-            except ValueError:
-                logger.warnw("Invalid camera command format", "payload", payload)
-        else:
-            logger.warnw("Invalid camera command format", "payload", payload)
-
-    except Exception as e:
-        logger.errorw("Error handling camera command", "error", str(e), exc_info=True)
 
 
 def handle_flag_capture_logic() -> bool:
@@ -238,24 +221,44 @@ def handle_flag_capture_logic() -> bool:
 
 def publish_status_update():
     """Publish periodic status updates."""
-    global mqtt_client, running, logger
+    global mqtt_client, running, logger, battery_manager
+
+    if not mqtt_client or not running:
+        return
 
     if not mqtt_client or not running:
         return
 
     try:
+        # Get battery percentage from battery manager
+        battery_percent = 100  # Default if no battery manager
+        power_source = "wired"
+
+        if battery_manager:
+            battery_percent = round(battery_manager.get_battery_percentage(), 2)
+            power_source = battery_manager.power_source.value
+
         # Collect status information
         status = {
-            "battery": 85,  # Example battery percentage
+            "battery": battery_percent,
+            "power_source": power_source,
             "timestamp": time.time(),
             # Add other status fields as needed
         }
 
         # Publish status information
-        status_message = f"status;{status['battery']};{status['timestamp']}"
+        status_message = (
+            f"status;{status['battery']};{status['power_source']};{status['timestamp']}"
+        )
         mqtt_client.publish(STATUS_TOPIC, status_message, qos=0)
-        logger.debugw(
-            "Status published", "battery", status["battery"], "timestamp", status["timestamp"]
+        logger.infow(
+            "Status published",
+            "battery",
+            status["battery"],
+            "power_source",
+            status["power_source"],
+            "timestamp",
+            status["timestamp"],
         )
 
         # Schedule next update if still running
@@ -283,6 +286,9 @@ def parse_arguments():
     )
 
     parser.add_argument("--client-id", type=str, default="rasptank", help="MQTT client ID")
+    parser.add_argument(
+        "--reset-battery", action="store_true", help="Reset battery to full charge (100%)"
+    )
 
     return parser.parse_args()
 
@@ -290,7 +296,7 @@ def parse_arguments():
 @log_function_call()
 def main():
     """Main entry point."""
-    global rasptank_hardware, mqtt_client, movement_controller, action_controller, running, logger
+    global rasptank_hardware, mqtt_client, movement_controller, action_controller, running, logger, battery_manager
 
     # Parse command line arguments
     args = parse_arguments()
@@ -319,6 +325,21 @@ def main():
         if not mqtt_client.connect() or not mqtt_client.wait_for_connection(timeout=10):
             mqtt_logger.fatalw("Unable to connect to MQTT broker")
             return 1
+
+        # Initialize Battery Manager (add after other initializations)
+        battery_logger = logger.with_component("battery")
+        battery_manager = BatteryManager(battery_logger)
+
+        if args.reset_battery:
+            logger.infow("Resetting battery to full charge (100%)")
+            battery_manager.reset_battery()
+
+        # Prompt user for power source
+        power_source = setup_power_source_prompt(battery_logger)
+        battery_manager.set_power_source(power_source)
+
+        # Start battery manager
+        battery_manager.start()
 
         # Initialize Rasptank Hardware
         hw_logger = logger.with_component("hardware")
