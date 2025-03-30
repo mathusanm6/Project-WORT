@@ -73,7 +73,14 @@ def signal_handler(sig, frame):
 @log_function_call()
 def cleanup():
     """Clean up all resources."""
-    global mqtt_client, movement_controller, action_controller, rasptank_hardware, battery_manager
+    global mqtt_client, movement_controller, action_controller, rasptank_hardware, battery_manager, status_update_timer
+
+    # Clean up status update timer
+    if "status_update_timer" in globals() and status_update_timer is not None:
+        try:
+            status_update_timer.cancel()
+        except Exception as e:
+            logger.errorw("Status update timer cleanup failed", "error", str(e))
 
     # Clean up battery manager
     if battery_manager:
@@ -221,10 +228,7 @@ def handle_flag_capture_logic() -> bool:
 
 def publish_status_update():
     """Publish periodic status updates."""
-    global mqtt_client, running, logger, battery_manager
-
-    if not mqtt_client or not running:
-        return
+    global mqtt_client, running, logger, battery_manager, status_update_timer
 
     if not mqtt_client or not running:
         return
@@ -261,12 +265,22 @@ def publish_status_update():
             status["timestamp"],
         )
 
-        # Schedule next update if still running
+        # Schedule next update if still running - only create a new timer if we're still running
         if running:
-            threading.Timer(10.0, publish_status_update).start()
+            # Store the timer object so we can cancel it if needed
+            status_update_timer = threading.Timer(10.0, publish_status_update)
+            status_update_timer.daemon = (
+                True  # Allow the program to exit even if this thread is running
+            )
+            status_update_timer.start()
 
     except Exception as e:
         logger.errorw("Error publishing status update", "error", str(e))
+        # Still try to schedule the next update on error
+        if running:
+            status_update_timer = threading.Timer(10.0, publish_status_update)
+            status_update_timer.daemon = True
+            status_update_timer.start()
 
 
 def parse_arguments():
@@ -297,6 +311,8 @@ def parse_arguments():
 def main():
     """Main entry point."""
     global rasptank_hardware, mqtt_client, movement_controller, action_controller, running, logger, battery_manager
+    global status_update_timer
+    status_update_timer = None
 
     # Parse command line arguments
     args = parse_arguments()
