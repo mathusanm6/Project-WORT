@@ -178,7 +178,7 @@ def handle_status_update(client, topic, payload, qos, retain):
 
             if status_type == "status" and len(parts) >= 3:
                 # Update tank status
-                battery = int(parts[1])
+                battery = float(parts[1])
                 power_source = parts[2]
                 timestamp = float(parts[3])
 

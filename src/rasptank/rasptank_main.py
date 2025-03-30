@@ -235,7 +235,7 @@ def publish_status_update():
         power_source = "wired"
 
         if battery_manager:
-            battery_percent = int(battery_manager.get_battery_percentage())
+            battery_percent = battery_manager.get_battery_percentage()
             power_source = battery_manager.power_source.value
 
         # Collect status information
