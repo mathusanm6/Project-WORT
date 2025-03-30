@@ -164,7 +164,6 @@ def handle_scan_command(client, topic, payload, qos, retain):
         qos (int): QoS level
         retain (bool): Whether the message was retained
     """
-    global qr, tank_id
     try:
         logger.infow("Scan QR code command received", "payload", payload)
         client.publish(QR_TOPIC(tank_id), qr, qos=1)
@@ -215,7 +214,7 @@ def on_flag_area():
     Checks whether the Rasptank is on the capture zone and handles
     the full capture logic (timing, MQTT events, animations).
     """
-    global rasptank_hardware, mqtt_client, flag, capturing, tank_id, is_currently_on_zone
+    global is_currently_on_zone
 
     # Track whether the tank is currently on the zone
     new_zone_status = rasptank_hardware.is_on_top_of_capture_zone()
@@ -249,7 +248,7 @@ def on_flag_area():
 
 
 def handle_flag(client, topic, payload, qos, retain):
-    global rasptank_hardware, flag, hit, team, qr, capturing
+    global flag, hit, team, qr, capturing
     try:
         # Handle server msg
         msgs = payload.split(" ")
@@ -380,7 +379,6 @@ def handle_shotout(client, topic, payload, qos, retain):
 
 
 def handle_qr(client, topic, payload, qos, retain):
-    global flag, team, rasptank_hardware
     try:
         logger.infow("QR code scan result received", "topic", topic, "payload", payload)
         msg = payload
