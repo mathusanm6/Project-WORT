@@ -850,7 +850,7 @@ def parse_arguments():
 def main():
     """Main entry point."""
     global rasptank_hardware, mqtt_client, movement_controller, action_controller
-    global logger, battery_manager, tank_id, args, camera_client, rasptank_message_factory
+    global logger, battery_manager, args, camera_client, rasptank_message_factory
 
     # Parse command line arguments
     args = parse_arguments()
