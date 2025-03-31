@@ -522,7 +522,7 @@ def handle_camera_command(client, topic, payload, qos, retain):
 
 # Flag capture logic and timer handled by server not rasptank
 # On zone logic
-@log_function_call
+@log_function_call()
 def on_flag_area():
     """
     Checks whether the Rasptank is on the capture zone and handles
