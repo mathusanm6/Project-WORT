@@ -127,7 +127,7 @@ class InfraReceiver:
                                 payload=message,
                                 qos=1,
                             )
-                            ir_receiver_instance.logger.debugw(
+                            ir_receiver_instance.logger.infow(
                                 "Published shot event",
                                 "topic",
                                 "tanks/" + TANK_ID + "/shots",
