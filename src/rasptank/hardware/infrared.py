@@ -61,6 +61,11 @@ class InfraReceiver:
         GPIO.setup(IrPins.RECEIVER.value, GPIO.IN)
         self.logger.debugw("IR receiver initialized", "pin", IrPins.RECEIVER.value)
 
+        # Initialize last hit time for debouncing
+        self.last_hit_time = 0
+        # Set the debounce interval (in seconds)
+        self.debounce_interval = 1.0  # Adjust this value as needed
+
     def setup_ir_receiver(self, client, led_command_queue):
         """Set up the IR receiver using interrupts for detecting hits.
 
@@ -79,6 +84,21 @@ class InfraReceiver:
             def ir_callback(channel):
                 ir_receiver_instance.logger.debugw("IR callback triggered", "channel", channel)
 
+                # Get current time for debounce checking
+                current_time = time.time()
+                elapsed = current_time - ir_receiver_instance.last_hit_time
+
+                # Check if we should ignore this trigger due to debounce
+                if elapsed < ir_receiver_instance.debounce_interval:
+                    ir_receiver_instance.logger.debugw(
+                        "Ignoring too frequent trigger", "elapsed", elapsed
+                    )
+                    return
+
+                # Update the last hit time
+                ir_receiver_instance.last_hit_time = current_time
+
+                # Process the signal
                 shooter = getSignal(channel, False)
 
                 if shooter:
@@ -126,11 +146,13 @@ class InfraReceiver:
                                 "Failed to publish shot event", "error", str(e), exc_info=True
                             )
 
-            # Add event detection with debounce time
+            # Add event detection with bouncetime (milliseconds)
+            # This is a hardware-level debounce that helps, but our software debounce will be more precise
             GPIO.add_event_detect(
                 IrPins.RECEIVER.value,
-                GPIO.BOTH,
+                GPIO.FALLING,
                 callback=ir_callback,
+                bouncetime=100,  # 100ms hardware debounce
             )
 
             self.logger.infow("IR receiver setup complete", "pin", IrPins.RECEIVER.value)
