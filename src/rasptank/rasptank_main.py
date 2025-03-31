@@ -63,11 +63,11 @@ TANK_ID = str(uuid.getnode())
 
 
 # TODO : REMOVE
-QR_TOPIC = lambda tank_id: f"rasptank/{tank_id}/qr_code"
-FLAG_TOPIC = lambda tank_id: f"rasptank/{tank_id}/flag"
-INIT_TOPIC = lambda tank_id: f"rasptank/{tank_id}/init"
-SHOTIN_TOPIC = lambda tank_id: f"rasptank/{tank_id}/shots/in"
-SHOTOUT_TOPIC = lambda tank_id: f"rasptank/{tank_id}/shots/out"
+QR_TOPIC = lambda tank_id: f"tanks/{tank_id}/qr_code"
+FLAG_TOPIC = lambda tank_id: f"tanks/{tank_id}/flag"
+INIT_TOPIC = lambda tank_id: f"tanks/{tank_id}/init"
+SHOTIN_TOPIC = lambda tank_id: f"tanks/{tank_id}/shots/in"
+SHOTOUT_TOPIC = lambda tank_id: f"tanks/{tank_id}/shots/out"
 
 
 def create_logger(log_level_str):
