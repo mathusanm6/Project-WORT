@@ -209,7 +209,7 @@ def handle_status_update(client, topic, payload, qos, retain):
 def check_tank_connection_timeout():
     """Check if tank connection has timed out due to no recent status messages."""
     # Define the timeout threshold (30 seconds)
-    CONNECTION_TIMEOUT_SECONDS = 10.0
+    CONNECTION_TIMEOUT_SECONDS = 6.0
 
     # Only check if tank was previously marked as connected
     if tank_status["connected"]:
