@@ -449,11 +449,8 @@ def handle_scan_command(client, topic, payload, qos, retain):
             logger.warnw("Camera client not initialized")
             return
 
-        client.publish(QR_TOPIC(TANK_ID), f"QR_CODE {camera_client.read_qr_codes()}", qos=1)
-        client.publish(STATUS_TOPIC, "Using stored QR code (camera unavailable)", qos=0)
-
         # Try to read QR codes from the camera
-        logger.infow("Scanning for QR codes using camera client")
+        logger.infow("[RASPTANK] Getting QR codes using camera client")
         client.publish(STATUS_TOPIC, "Scanning for QR codes...", qos=0)
 
         # Force refresh to get the latest QR codes
@@ -461,16 +458,17 @@ def handle_scan_command(client, topic, payload, qos, retain):
 
         if qr_codes:
             detected_qr = qr_codes[0]  # Use the first detected QR code
-            logger.infow("QR code detected via camera", "qr_code", detected_qr)
+            logger.infow("[RASPTANK] QR code detected via camera", "qr_code", detected_qr)
 
             # Send the detected QR code to the server
             client.publish(QR_TOPIC(TANK_ID), f"QR_CODE {detected_qr}", qos=1)
-            client.publish(STATUS_TOPIC, f"QR code detected: {detected_qr}", qos=0)
+            client.publish(
+                STATUS_TOPIC,
+                f"[RASPTANK] QR code detected, sending to server...: {detected_qr}",
+                qos=0,
+            )
         else:
-            # If no QR code detected via camera, fall back to the stored QR value
-            logger.warnw("No QR code detected via camera, using stored value", "stored_qr", qr)
-            client.publish(QR_TOPIC(TANK_ID), f"QR_CODE {qr}", qos=1)
-            client.publish(STATUS_TOPIC, "Using stored QR code value", qos=0)
+            logger.infow("[RASPTANK] QR CODE not detected")
 
     except Exception as e:
         logger.errorw("Error handling scan QR command", "error", str(e), exc_info=True)
