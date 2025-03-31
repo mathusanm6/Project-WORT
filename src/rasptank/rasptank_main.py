@@ -444,7 +444,7 @@ def handle_scan_command(client, topic, payload, qos, retain):
         # Check if camera client is initialized
         if camera_client is None:
             logger.warnw("Camera client not initialized, using stored QR code")
-            client.publish(QR_TOPIC(tank_id), qr, qos=1)
+            client.publish(QR_TOPIC(tank_id), f"QR_CODE {qr}", qos=1)
             client.publish(STATUS_TOPIC, "Using stored QR code (camera unavailable)", qos=0)
             return
 
@@ -460,12 +460,12 @@ def handle_scan_command(client, topic, payload, qos, retain):
             logger.infow("QR code detected via camera", "qr_code", detected_qr)
 
             # Send the detected QR code to the server
-            client.publish(QR_TOPIC(tank_id), detected_qr, qos=1)
+            client.publish(QR_TOPIC(tank_id), f"QR_CODE {detected_qr}", qos=1)
             client.publish(STATUS_TOPIC, f"QR code detected: {detected_qr}", qos=0)
         else:
             # If no QR code detected via camera, fall back to the stored QR value
             logger.warnw("No QR code detected via camera, using stored value", "stored_qr", qr)
-            client.publish(QR_TOPIC(tank_id), qr, qos=1)
+            client.publish(QR_TOPIC(tank_id), f"QR_CODE {qr}", qos=1)
             client.publish(STATUS_TOPIC, "Using stored QR code value", qos=0)
 
     except Exception as e:
@@ -473,7 +473,7 @@ def handle_scan_command(client, topic, payload, qos, retain):
 
         # Fall back to the stored QR value in case of error
         try:
-            client.publish(QR_TOPIC(tank_id), qr, qos=1)
+            client.publish(QR_TOPIC(tank_id), f"QR_CODE {qr}", qos=1)
             client.publish(STATUS_TOPIC, "Error scanning QR code, using stored value", qos=0)
         except Exception as fallback_error:
             logger.errorw("Error in fallback QR code handling", "error", str(fallback_error))
