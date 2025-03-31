@@ -5,6 +5,6 @@ TANK_ID = (
     str(tank_id)[:15]
     if len(str(tank_id)) > 15
     else (
-        str(tank_id) if len(str(tank_id)) == 15 else str(tank_id) + ("0" * (15 - len(str(tank_id))))
+        str(tank_id) if len(str(tank_id)) == 15 else str(tank_id) + ("2" * (15 - len(str(tank_id))))
     )
 )
