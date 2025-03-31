@@ -91,6 +91,8 @@ class RasptankLedStrip:
 
             self.logger.debugw("Setting LED color", "r", r, "g", g, "b", b)
 
+            self.strip.begin()
+
             # Set each pixel's color
             for i in range(self.strip.numPixels()):
                 self.strip.setPixelColor(i, Color(r, g, b))
