@@ -522,6 +522,7 @@ def handle_camera_command(client, topic, payload, qos, retain):
 
 # Flag capture logic and timer handled by server not rasptank
 # On zone logic
+@log_function_call
 def on_flag_area():
     """
     Checks whether the Rasptank is on the capture zone and handles
@@ -535,6 +536,7 @@ def on_flag_area():
     # Only send a message if the status has changed
     if new_zone_status != is_currently_on_zone:
         try:
+            logger.infow("Flag area status changed", "new_status", new_zone_status)
             if new_zone_status:
                 # Just entered the zone
                 if mqtt_client and not capturing:
