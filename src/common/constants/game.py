@@ -3,6 +3,7 @@
 import uuid
 
 FLAG_CAPTURE_DURATION = 5  # Duration in seconds for capturing the flag
+FREEZED_DURATION = 2
 
 # MQTT Topics
 STATUS_TOPIC = "rasptank/status"
