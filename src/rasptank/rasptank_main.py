@@ -446,10 +446,11 @@ def handle_scan_command(client, topic, payload, qos, retain):
 
         # Check if camera client is initialized
         if camera_client is None:
-            logger.warnw("Camera client not initialized, using stored QR code")
-            client.publish(QR_TOPIC(TANK_ID), f"QR_CODE {qr}", qos=1)
-            client.publish(STATUS_TOPIC, "Using stored QR code (camera unavailable)", qos=0)
+            logger.warnw("Camera client not initialized")
             return
+
+        client.publish(QR_TOPIC(TANK_ID), f"QR_CODE {camera_client.read_qr_codes()}", qos=1)
+        client.publish(STATUS_TOPIC, "Using stored QR code (camera unavailable)", qos=0)
 
         # Try to read QR codes from the camera
         logger.infow("Scanning for QR codes using camera client")
@@ -1060,20 +1061,7 @@ def main():
                 command = rasptank_hardware.led_command_queue.get(timeout=0.1)
                 led_logger = logger.with_component("led")
 
-                if command.startswith("hit:"):
-                    # Parse the shooter ID from the command
-                    parts = command.split(":", 1)
-                    shooter = parts[1] if len(parts) > 1 else "unknown"
-
-                    led_logger.infow("Hit event processed in main loop", "shooter", shooter)
-                    rasptank_hardware.led_strip.hit_animation()
-
-                    # Send properly formatted message to server
-                    mqtt_client.publish(
-                        topic=SHOTIN_TOPIC(TANK_ID), payload=f"SHOT_BY {shooter}", qos=1
-                    )
-                    led_logger.debugw("Published shot in event", "shooter", shooter)
-                elif command == "hit":
+                if command == "hit":
                     # Legacy support for old format without shooter ID
                     led_logger.infow("Hit event processed in main loop (legacy format)")
                     rasptank_hardware.led_strip.hit_animation()
