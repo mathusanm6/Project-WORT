@@ -1,5 +1,6 @@
 """This module provides classes for interfacing with infrared sensors and emitters."""
 
+import threading
 import time
 import uuid
 from enum import Enum
@@ -63,8 +64,33 @@ class InfraReceiver:
 
         # Initialize last hit time for debouncing
         self.last_hit_time = 0
-        # Set the debounce interval (in seconds)
-        self.debounce_interval = 1.0  # Adjust this value as needed
+        # Set the debounce interval (in seconds) - increased for greater stability
+        self.debounce_interval = 2.0  # Adjusted to 2 seconds
+        # Create a lock for thread safety
+        self.ir_lock = threading.Lock()
+        # Flag to disable IR processing temporarily after a hit
+        self.ir_disabled = False
+        # Timer for re-enabling IR
+        self.disable_timer = None
+
+    def _disable_ir_temporarily(self):
+        """Temporarily disable IR processing to avoid multiple triggers."""
+        with self.ir_lock:
+            self.ir_disabled = True
+
+        # Set a timer to re-enable IR after the debounce period
+        if self.disable_timer:
+            self.disable_timer.cancel()
+
+        self.disable_timer = threading.Timer(self.debounce_interval, self._enable_ir)
+        self.disable_timer.daemon = True
+        self.disable_timer.start()
+
+    def _enable_ir(self):
+        """Re-enable IR processing after the debounce period."""
+        with self.ir_lock:
+            self.ir_disabled = False
+            self.logger.debugw("IR receiver re-enabled after debounce period")
 
     def setup_ir_receiver(self, client, led_command_queue):
         """Set up the IR receiver using interrupts for detecting hits.
@@ -80,8 +106,13 @@ class InfraReceiver:
             # Store a reference to self for the callback closure
             ir_receiver_instance = self
 
-            # Define callback function
+            # Define callback function with better debounce handling
             def ir_callback(channel):
+                # Log only if not in a blocked state to reduce log spam
+                with ir_receiver_instance.ir_lock:
+                    if ir_receiver_instance.ir_disabled:
+                        return
+
                 ir_receiver_instance.logger.debugw("IR callback triggered", "channel", channel)
 
                 # Get current time for debounce checking
@@ -94,6 +125,9 @@ class InfraReceiver:
                         "Ignoring too frequent trigger", "elapsed", elapsed
                     )
                     return
+
+                # Immediately disable IR to prevent further processing during this hit
+                ir_receiver_instance._disable_ir_temporarily()
 
                 # Update the last hit time
                 ir_receiver_instance.last_hit_time = current_time
@@ -146,16 +180,29 @@ class InfraReceiver:
                                 "Failed to publish shot event", "error", str(e), exc_info=True
                             )
 
-            # Add event detection with bouncetime (milliseconds)
-            # This is a hardware-level debounce that helps, but our software debounce will be more precise
+            # Remove any existing event detection first (in case of reinitializing)
+            try:
+                GPIO.remove_event_detect(IrPins.RECEIVER.value)
+            except:
+                pass  # Ignore if no previous event detection
+
+            # Add event detection with much higher bouncetime
             GPIO.add_event_detect(
                 IrPins.RECEIVER.value,
                 GPIO.FALLING,
                 callback=ir_callback,
-                bouncetime=100,  # 100ms hardware debounce
+                bouncetime=500,  # 500ms hardware debounce - significantly higher
             )
 
-            self.logger.infow("IR receiver setup complete", "pin", IrPins.RECEIVER.value)
+            self.logger.infow(
+                "IR receiver setup complete with enhanced debounce protection",
+                "pin",
+                IrPins.RECEIVER.value,
+                "debounce_interval",
+                self.debounce_interval,
+                "bouncetime",
+                500,
+            )
             return True
 
         except Exception as e:
@@ -165,6 +212,10 @@ class InfraReceiver:
     def cleanup(self):
         """Clean up the IR receiver."""
         try:
+            # Cancel any pending timer
+            if self.disable_timer:
+                self.disable_timer.cancel()
+
             # Remove event detection
             GPIO.remove_event_detect(IrPins.RECEIVER.value)
             self.logger.infow("IR receiver GPIO cleanup complete", "pin", IrPins.RECEIVER.value)
