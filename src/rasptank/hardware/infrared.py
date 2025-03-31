@@ -59,7 +59,6 @@ class InfraReceiver:
         self.logger.infow("Initializing IR receiver", "pin", IrPins.RECEIVER.value)
 
         GPIO.setup(IrPins.RECEIVER.value, GPIO.IN)
-        self.last_trigger_time = 0
         self.logger.debugw("IR receiver initialized", "pin", IrPins.RECEIVER.value)
 
     def setup_ir_receiver(self, client, led_command_queue):
@@ -80,18 +79,6 @@ class InfraReceiver:
             def ir_callback(channel):
                 ir_receiver_instance.logger.debugw("IR callback triggered", "channel", channel)
 
-                # Check if the callback is triggered too frequently
-                # to avoid false positives
-                now = time.time()
-                if now - ir_receiver_instance.last_trigger_time < 0.3:  # 300ms cooldown
-                    ir_receiver_instance.logger.debugw(
-                        "Ignoring too frequent trigger",
-                        "elapsed",
-                        now - ir_receiver_instance.last_trigger_time,
-                    )
-                    return  # Ignore too-frequent triggers
-
-                ir_receiver_instance.last_trigger_time = now
                 shooter = getSignal(channel, False)
 
                 if shooter:
