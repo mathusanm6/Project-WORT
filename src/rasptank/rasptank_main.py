@@ -25,16 +25,7 @@ from src.common.constants.game import FLAG_CAPTURE_DURATION, GAME_EVENT_TOPIC, S
 from src.common.constants.movement import MOVEMENT_COMMAND_TOPIC, MOVEMENT_STATE_TOPIC
 
 # Import from src.common
-from src.common.constants.server import (
-    FLAG_TOPIC,
-    INIT_TOPIC,
-    QR_TOPIC,
-    SHOTIN_TOPIC,
-    SHOTOUT_TOPIC,
-)
 from src.common.logging.decorators import log_function_call
-
-# Import from logging system
 from src.common.logging.logger_api import Logger, LogLevel
 from src.common.logging.logger_factory import LoggerFactory
 from src.common.mqtt.client import MQTTClient
@@ -44,6 +35,7 @@ from src.rasptank.action import ActionController
 from src.rasptank.battery_manager import BatteryManager, PowerSource
 from src.rasptank.hardware.hardware_main import RasptankHardware
 from src.rasptank.movement.controller.mqtt import MQTTMovementController
+from src.rasptank.rasptank_message_factory import RasptankMessageFactory
 
 # Global variables for resources that need cleanup
 args = None
@@ -56,6 +48,7 @@ action_controller: ActionController = None
 running = True
 camera_process = None
 camera_client: CameraClient = None
+rasptank_message_factory: RasptankMessageFactory = None
 
 # Global variables for ongoing game
 team = None
@@ -65,6 +58,16 @@ hit = 0
 capturing = False
 tank_id = None
 is_currently_on_zone = False
+
+TANK_ID = str(uuid.getnode())
+
+
+# TODO : REMOVE
+QR_TOPIC = lambda tank_id: f"rasptank/{tank_id}/qr_code"
+FLAG_TOPIC = lambda tank_id: f"rasptank/{tank_id}/flag"
+INIT_TOPIC = lambda tank_id: f"rasptank/{tank_id}/init"
+SHOTIN_TOPIC = lambda tank_id: f"rasptank/{tank_id}/shots/in"
+SHOTOUT_TOPIC = lambda tank_id: f"rasptank/{tank_id}/shots/out"
 
 
 def create_logger(log_level_str):
@@ -444,7 +447,7 @@ def handle_scan_command(client, topic, payload, qos, retain):
         # Check if camera client is initialized
         if camera_client is None:
             logger.warnw("Camera client not initialized, using stored QR code")
-            client.publish(QR_TOPIC(tank_id), f"QR_CODE {qr}", qos=1)
+            client.publish(QR_TOPIC(TANK_ID), f"QR_CODE {qr}", qos=1)
             client.publish(STATUS_TOPIC, "Using stored QR code (camera unavailable)", qos=0)
             return
 
@@ -460,12 +463,12 @@ def handle_scan_command(client, topic, payload, qos, retain):
             logger.infow("QR code detected via camera", "qr_code", detected_qr)
 
             # Send the detected QR code to the server
-            client.publish(QR_TOPIC(tank_id), f"QR_CODE {detected_qr}", qos=1)
+            client.publish(QR_TOPIC(TANK_ID), f"QR_CODE {detected_qr}", qos=1)
             client.publish(STATUS_TOPIC, f"QR code detected: {detected_qr}", qos=0)
         else:
             # If no QR code detected via camera, fall back to the stored QR value
             logger.warnw("No QR code detected via camera, using stored value", "stored_qr", qr)
-            client.publish(QR_TOPIC(tank_id), f"QR_CODE {qr}", qos=1)
+            client.publish(QR_TOPIC(TANK_ID), f"QR_CODE {qr}", qos=1)
             client.publish(STATUS_TOPIC, "Using stored QR code value", qos=0)
 
     except Exception as e:
@@ -473,7 +476,7 @@ def handle_scan_command(client, topic, payload, qos, retain):
 
         # Fall back to the stored QR value in case of error
         try:
-            client.publish(QR_TOPIC(tank_id), f"QR_CODE {qr}", qos=1)
+            client.publish(QR_TOPIC(TANK_ID), f"QR_CODE {qr}", qos=1)
             client.publish(STATUS_TOPIC, "Error scanning QR code, using stored value", qos=0)
         except Exception as fallback_error:
             logger.errorw("Error in fallback QR code handling", "error", str(fallback_error))
@@ -533,20 +536,20 @@ def on_flag_area():
                 # Just entered the zone
                 if mqtt_client and not capturing:
                     mqtt_client.publish(
-                        topic=FLAG_TOPIC(tank_id),
+                        topic=FLAG_TOPIC(TANK_ID),
                         payload="ENTER_FLAG_AREA",
                         qos=1,
                     )
-                    logger.debugw("Published flag area entry event", "tank_id", tank_id)
+                    logger.debugw("Published flag area entry event", "TANK_ID", TANK_ID)
             else:
                 # Just exited the zone
                 if mqtt_client:
                     mqtt_client.publish(
-                        topic=FLAG_TOPIC(tank_id),
+                        topic=FLAG_TOPIC(TANK_ID),
                         payload="EXIT_FLAG_AREA",
                         qos=1,
                     )
-                    logger.debugw("Published flag area exit event", "tank_id", tank_id)
+                    logger.debugw("Published flag area exit event", "TANK_ID", TANK_ID)
         except Exception as e:
             logger.errorw("Failed to publish flag area event", "error", str(e), exc_info=True)
 
@@ -759,6 +762,32 @@ def publish_status_update():
         logger.errorw("Error publishing status update", "error", str(e))
 
 
+def setup_server_subscriptions():
+    """Set up MQTT subscriptions for server communication."""
+    global TANK_ID
+
+    # Initialize Rasptank message factory
+    rasptank_message_factory = RasptankMessageFactory()
+
+    # Server topics communication
+    # Set up handler for init server msg
+    if len(TANK_ID) > 15:
+        TANK_ID = TANK_ID[0:15]
+    mqtt_client.subscribe(topic=INIT_TOPIC(TANK_ID), qos=1, callback=handle_init)
+    mqtt_client.publish(
+        topic="init", payload=f"INIT {TANK_ID}", qos=1
+    )  # Don't change topic, it's should be fixed
+
+    # Set up handler for flag server msg
+    mqtt_client.subscribe(topic=FLAG_TOPIC(TANK_ID), qos=1, callback=handle_flag)
+
+    # Set up handler for qr code management from server
+    mqtt_client.subscribe(topic=QR_TOPIC(TANK_ID), qos=1, callback=handle_qr)
+    # Set up handler for shoot server msg
+    mqtt_client.subscribe(topic=SHOTIN_TOPIC(TANK_ID), qos=1, callback=handle_shotin)
+    mqtt_client.subscribe(topic=SHOTOUT_TOPIC(TANK_ID), qos=1, callback=handle_shotout)
+
+
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Rasptank MQTT Control")
@@ -817,7 +846,7 @@ def parse_arguments():
 def main():
     """Main entry point."""
     global rasptank_hardware, mqtt_client, movement_controller, action_controller
-    global logger, battery_manager, tank_id, args, camera_client
+    global logger, battery_manager, tank_id, args, camera_client, rasptank_message_factory
 
     # Parse command line arguments
     args = parse_arguments()
@@ -933,24 +962,14 @@ def main():
         mqtt_client.subscribe(CAMERA_COMMAND_TOPIC, qos=0, callback=handle_camera_command)
         mqtt_client.subscribe(SCAN_COMMAND_TOPIC, qos=0, callback=handle_scan_command)
 
-        # Server topics communication
-        # Set up handler for init server msg
-        tank_id = str(uuid.getnode())
-        if len(tank_id) > 15:
-            tank_id = tank_id[0:15]
-        mqtt_client.subscribe(topic=INIT_TOPIC(tank_id), qos=1, callback=handle_init)
-        mqtt_client.publish(
-            topic="init", payload=f"INIT {tank_id}", qos=1
-        )  # Don't change topic, it's should be fixed
-
-        # Set up handler for flag server msg
-        mqtt_client.subscribe(topic=FLAG_TOPIC(tank_id), qos=1, callback=handle_flag)
-
-        # Set up handler for qr code management from server
-        mqtt_client.subscribe(topic=QR_TOPIC(tank_id), qos=1, callback=handle_qr)
-        # Set up handler for shoot server msg
-        mqtt_client.subscribe(topic=SHOTIN_TOPIC(tank_id), qos=1, callback=handle_shotin)
-        mqtt_client.subscribe(topic=SHOTOUT_TOPIC(tank_id), qos=1, callback=handle_shotout)
+        setup_server_subscriptions(
+            mqtt_client,
+            handle_flag,
+            handle_init,
+            handle_shotin,
+            handle_shotout,
+            handle_qr,
+        )
 
         # Periodic status updates
         publish_status_update()
@@ -1051,7 +1070,7 @@ def main():
 
                     # Send properly formatted message to server
                     mqtt_client.publish(
-                        topic=SHOTIN_TOPIC(tank_id), payload=f"SHOT_BY {shooter}", qos=1
+                        topic=SHOTIN_TOPIC(TANK_ID), payload=f"SHOT_BY {shooter}", qos=1
                     )
                     led_logger.debugw("Published shot in event", "shooter", shooter)
                 elif command == "hit":
@@ -1062,7 +1081,7 @@ def main():
                     # For legacy support, we need to handle this differently
                     # Use a placeholder or notify about missing shooter ID
                     mqtt_client.publish(
-                        topic=SHOTIN_TOPIC(tank_id), payload="SHOT_BY unknown", qos=1
+                        topic=SHOTIN_TOPIC(TANK_ID), payload="SHOT_BY unknown", qos=1
                     )
                     led_logger.warnw(
                         "Published shot in event with unknown shooter - update IR receiver code"
