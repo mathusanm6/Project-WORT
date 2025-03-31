@@ -21,7 +21,12 @@ from src.common.constants.actions import (
     SCAN_COMMAND_TOPIC,
     SHOOT_COMMAND_TOPIC,
 )
-from src.common.constants.game import FLAG_CAPTURE_DURATION, GAME_EVENT_TOPIC, STATUS_TOPIC
+from src.common.constants.game import (
+    FLAG_CAPTURE_DURATION,
+    FREEZED_DURATION,
+    GAME_EVENT_TOPIC,
+    STATUS_TOPIC,
+)
 from src.common.constants.movement import MOVEMENT_COMMAND_TOPIC, MOVEMENT_STATE_TOPIC
 
 # Import from src.common
@@ -653,11 +658,13 @@ def handle_shotin(client, topic, payload, qos, retain):
     try:
         # Handle server msg
         logger.infow("Shot-in message received", "topic", topic, "payload", payload)
-        msg = payload
+        msgs = payload.split(" ")
+        msg = msgs[0]
         if msg == "SHOT":
             logger.infow("Tank was shot, implementing freeze behavior")
-            print("TODO freeze the tank")
-            # TODO: Implement tank freeze behavior here
+            time.sleep(FREEZED_DURATION)  # TODO check sending msg
+        elif msg == "SHOT_BY":
+            pass
         else:
             logger.warnw("Unknown shot-in message", "topic", topic, "message", msg)
             print(f"Unknown message from server's on topic {topic}, msg= {msg}")
@@ -672,14 +679,10 @@ def handle_shotout(client, topic, payload, qos, retain):
         logger.infow("Shot-out message received", "topic", topic, "payload", payload)
         msg = payload
         if msg == "FRIENDLY_FIRE":
-            logger.warnw("Friendly fire detected")
-            print("TODO stop shooting on friend bro you're stupid")
-            # TODO: Implement friendly fire warning
+            logger.warnw("Stop shooting on friend bro you're stupid")
         elif msg == "SHOT":
             hit = hit + 1
-            logger.infow("Successful hit registered", "total_hits", hit)
-            print("TODO headshot")
-            # TODO: Implement hit success feedback
+            logger.infow("Successful hit registered, headsho0 !t", "total_hits: ", hit)
         else:
             logger.warnw("Unknown shot-out message", "topic", topic, "message", msg)
             print(f"Unknown message from server's on topic {topic}, msg= {msg}")
@@ -693,7 +696,6 @@ def handle_qr(client, topic, payload, qos, retain):
         msgs = payload.split(" ")
         msg = msgs[0]
         if msg in ["SCAN_SUCCESSFUL", "SCAN_FAILED", "FLAG_DEPOSITED", "NO_FLAG"]:
-            raise ValueError(msg)
             client.publish(STATUS_TOPIC, msg, qos=0)
             logger.infow("QR scan result", "result", msg)
             if msg == "FLAG_DEPOSITED":
@@ -1063,9 +1065,7 @@ def main():
 
                     # For legacy support, we need to handle this differently
                     # Use a placeholder or notify about missing shooter ID
-                    mqtt_client.publish(
-                        topic=SHOTIN_TOPIC(TANK_ID), payload="SHOT_BY unknown", qos=1
-                    )
+                    mqtt_client.publish(topic=SHOTIN_TOPIC(TANK_ID), payload="SHOT_BY TODO", qos=1)
                     led_logger.warnw(
                         "Published shot in event with unknown shooter - update IR receiver code"
                     )
