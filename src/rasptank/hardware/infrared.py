@@ -9,6 +9,7 @@ from RPi import GPIO
 # Import from src.common
 from src.common.constants.game import GAME_EVENT_TOPIC
 from src.common.logging.logger_api import Logger, LogLevel
+from src.rasptank.constants import TANK_ID
 
 # src.rasptank
 from src.rasptank.hardware.infra_lib import IRBlast, getSignal
@@ -116,6 +117,26 @@ class InfraReceiver:
                         except Exception as e:
                             ir_receiver_instance.logger.errorw(
                                 "Failed to publish hit event", "error", str(e), exc_info=True
+                            )
+
+                        # Send server
+                        message = "SHOT_BY " + shooter
+                        try:
+                            client.publish(
+                                topic="tanks/" + TANK_ID + "/shots",
+                                payload=message,
+                                qos=1,
+                            )
+                            ir_receiver_instance.logger.debugw(
+                                "Published shot event",
+                                "topic",
+                                "tanks/" + TANK_ID + "/shots",
+                                "payload",
+                                message,
+                            )
+                        except Exception as e:
+                            ir_receiver_instance.logger.errorw(
+                                "Failed to publish shot event", "error", str(e), exc_info=True
                             )
 
             # Add event detection with debounce time

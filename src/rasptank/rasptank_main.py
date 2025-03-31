@@ -38,6 +38,7 @@ from src.common.mqtt.client import MQTTClient
 # Import from src.rasptank
 from src.rasptank.action import ActionController
 from src.rasptank.battery_manager import BatteryManager, PowerSource
+from src.rasptank.constants import TANK_ID
 from src.rasptank.hardware.hardware_main import RasptankHardware
 from src.rasptank.movement.controller.mqtt import MQTTMovementController
 from src.rasptank.rasptank_message_factory import RasptankMessageFactory
@@ -63,8 +64,6 @@ hit = 0
 capturing = False
 tank_id = None
 is_currently_on_zone = False
-
-TANK_ID = str(uuid.getnode())
 
 
 # TODO : REMOVE
@@ -1059,16 +1058,8 @@ def main():
                 led_logger = logger.with_component("led")
 
                 if command == "hit":
-                    # Legacy support for old format without shooter ID
-                    led_logger.infow("Hit event processed in main loop (legacy format)")
+                    led_logger.infow("Hit event processed in main loop")
                     rasptank_hardware.led_strip.hit_animation()
-
-                    # For legacy support, we need to handle this differently
-                    # Use a placeholder or notify about missing shooter ID
-                    mqtt_client.publish(topic=SHOTIN_TOPIC(TANK_ID), payload="SHOT_BY TODO", qos=1)
-                    led_logger.warnw(
-                        "Published shot in event with unknown shooter - update IR receiver code"
-                    )
                 else:
                     led_logger.warnw("Unknown command in LED queue", "command", command)
             except Empty:
