@@ -690,13 +690,17 @@ def handle_shotout(client, topic, payload, qos, retain):
 def handle_qr(client, topic, payload, qos, retain):
     try:
         logger.infow("QR code scan result received", "topic", topic, "payload", payload)
-        msg = payload
+        msgs = payload.split(" ")
+        msg = msgs[0]
         if msg in ["SCAN_SUCCESSFUL", "SCAN_FAILED", "FLAG_DEPOSITED", "NO_FLAG"]:
+            raise ValueError(msg)
             client.publish(STATUS_TOPIC, msg, qos=0)
             logger.infow("QR scan result", "result", msg)
             if msg == "FLAG_DEPOSITED":
                 logger.infow("Flag successfully deposited, playing scored animation")
                 rasptank_hardware.led_strip.scored_animation()
+        elif msg == "QR_CODE":
+            pass
         else:
             logger.warnw("Unknown QR scan message", "topic", topic, "message", msg)
             print(f"Unknown message from server's on topic {topic}, msg= {msg}")
