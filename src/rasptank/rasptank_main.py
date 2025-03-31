@@ -768,7 +768,7 @@ def setup_server_subscriptions():
     global TANK_ID
 
     # Initialize Rasptank message factory
-    rasptank_message_factory = RasptankMessageFactory()
+    rasptank_message_factory = RasptankMessageFactory(TANK_ID)
 
     # Server topics communication
     # Set up handler for init server msg
