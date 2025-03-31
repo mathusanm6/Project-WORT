@@ -963,14 +963,7 @@ def main():
         mqtt_client.subscribe(CAMERA_COMMAND_TOPIC, qos=0, callback=handle_camera_command)
         mqtt_client.subscribe(SCAN_COMMAND_TOPIC, qos=0, callback=handle_scan_command)
 
-        setup_server_subscriptions(
-            mqtt_client,
-            handle_flag,
-            handle_init,
-            handle_shotin,
-            handle_shotout,
-            handle_qr,
-        )
+        setup_server_subscriptions()
 
         # Periodic status updates
         publish_status_update()
