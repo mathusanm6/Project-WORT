@@ -129,7 +129,7 @@ class InfraReceiver:
             # Add event detection with debounce time
             GPIO.add_event_detect(
                 IrPins.RECEIVER.value,
-                GPIO.FALLING,
+                GPIO.BOTH,
                 callback=ir_callback,
             )
 
