@@ -33,4 +33,5 @@ class TrackingModule:
 
     def is_white_in_middle(self) -> bool:
         _, status_middle, _ = self._get_tracking_module_status()
+        self.logger(f"Tracking module status: {status_middle=}")
         return status_middle == 0
