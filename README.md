@@ -81,7 +81,7 @@ We have successfully completed the project, and our robot is fully functional. W
 <p align="center" style="position: relative; display: inline-block;">
   <a href="https://youtu.be/EKCg1bY0kG4">
     <img src="https://img.youtube.com/vi/EKCg1bY0kG4/0.jpg" alt="Rasptank Early In-Development Movement Video" style="width: 70%; max-width: 860px;">
-    <img src="resources/images/play_button.png" alt="Play Button" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 10%; max-width: 100px;">
+    <img src="resources/images/play_button.png" alt="Play Button" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 5%; max-width: 50px;">
   </a>
 </p>
 
