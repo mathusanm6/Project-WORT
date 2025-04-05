@@ -78,7 +78,7 @@ We have successfully completed the project, and our robot is fully functional. W
 
 (*): The webcam streaming wasn't required but recommended. We did it to enhance our experience and for fun.
 
-<p align="center">
+<p align="center" style="position: relative; display: inline-block;">
   <a href="https://youtu.be/EKCg1bY0kG4">
     <img src="https://img.youtube.com/vi/EKCg1bY0kG4/0.jpg" alt="Rasptank Early In-Development Movement Video" style="width: 70%; max-width: 860px;">
     <img src="resources/images/play_button.png" alt="Play Button" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 10%; max-width: 100px;">
