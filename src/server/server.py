@@ -46,7 +46,6 @@ def addToRedTeam(id):
 
 
 def giveFlag(id, topic):
-    global flag
     for i in range(5):
         time.sleep(1)
         if not participants[id]["catching"]:
@@ -58,7 +57,6 @@ def giveFlag(id, topic):
 
 
 def processData(client, userdata, message):
-    global flag
     querry = str(message.payload.decode("utf-8")).split(" ")
 
     if message.topic == "init":
