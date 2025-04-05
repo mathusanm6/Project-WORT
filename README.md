@@ -1,6 +1,26 @@
-# Network Programming Project - M1 IoT (2024-2025)
+# Project WORT - World of Rasptank
 
-> The screenshots and videos in this README are from early development stages or were captured after returning the Rasptank. As such, they do not fully represent the final capabilities of the project. They are included to give a general idea of the project’s concept, rather than showcasing its full potential.
+> :warning: **Note:** The screenshots and videos in this README are from early development stages or were captured after returning the Rasptank. As such, they do not fully represent the final capabilities of the project. They are included to give a general idea of the project’s concept, rather than showcasing its full potential.
+
+## 📚 Table of Contents
+- [Project WORT - World of Rasptank](#project-wort---world-of-rasptank)
+  - [📚 Table of Contents](#-table-of-contents)
+  - [Overview](#overview)
+    - [*World of Rasptank*](#world-of-rasptank)
+  - [Context](#context)
+  - [Objectives](#objectives)
+  - [Our Achievements](#our-achievements)
+    - [Important Features](#important-features)
+      - [Rasptank](#rasptank)
+      - [Dashboard (Controller Interface)](#dashboard-controller-interface)
+      - [Rasptank \<-\> Dashboard Communication](#rasptank---dashboard-communication)
+      - [Rasptank \<-\> Game Server Communication](#rasptank---game-server-communication)
+    - [Additional Features We Implemented For Fun](#additional-features-we-implemented-for-fun)
+      - [Developer Experience](#developer-experience)
+      - [Game Server Enhancements](#game-server-enhancements)
+      - [Player Experience](#player-experience)
+  - [Contributors](#contributors)
+  - [In Retrospection](#in-retrospection)
 
 ## Overview
 
@@ -58,7 +78,7 @@ We have successfully completed the project, and our robot is fully functional. W
 
 [![Rasptank Early In-Development Movement Video](https://img.youtube.com/vi/EKCg1bY0kG4/0.jpg)](https://youtu.be/EKCg1bY0kG4)
 
-#### Controller (a.k.a Dashboard in our case)
+#### Dashboard (Controller Interface)
 
 We had complete freedom in designing the controller, but it had to allow at least:
 
@@ -126,3 +146,13 @@ We also had to use the MQTT protocol to communicate with the game server. The ga
 | Jewin      | CHENG      | @jewinc     |
 | Elie       | KANGA      | @Kg-elie    |
 | Mathusan   | SELVAKUMAR | @mathusanm6 |
+
+## In Retrospection
+
+We are very proud of our project and the work we accomplished. We learned a lot about IoT, MQTT, and robotics. It was a lot of fun to work on this project, and we enjoyed the challenge of implementing all the features.
+
+One of our pain points was the duration of the project and the limited time we had to complete it (just 2 weeks). We had to work hard to meet the deadline, but we managed to deliver a fully functional robot.
+Secondly, we had to deal with the Rasptank's hardware limitations, which made it challenging to implement some features. We had to be creative and find workarounds to make everything work.
+Finally, we had to deal with the game server's limitations, leading to the impossibility to host a World of Rasptank match.
+
+We hope this project encourages future students to explore creative solutions within the constraints of time and resources. With additional time, we would have liked to delve into autonomous navigation or experiment with OpenCV for enhanced object recognition.
