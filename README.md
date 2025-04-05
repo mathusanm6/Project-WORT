@@ -84,10 +84,10 @@ We also had to use the MQTT protocol to communicate with the game server. The ga
 
 - [x] A battery level indicator on the dashboard for the Rasptank.
 - [x] DualSense controller feedback (vibration) and light bar color change when:
-  - The Rasptank is hit
-  - The Rasptank is in the capture zone
-  - The Rasptank is carrying the flag
-  - The Rasptank moves based on the speed mode and turn type
+  - the Rasptank is hit
+  - the Rasptank is in the capture zone
+  - the Rasptank is carrying the flag
+  - the Rasptank moves based on the speed mode and turn type
 - [x] Fine-tuned the rumble effect of the DualSense controller to match the Rasptank's movement and overall experience.
 - [x] QR code scanning on command using `O Button` using the controller.
 
