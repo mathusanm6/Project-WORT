@@ -1,5 +1,7 @@
 # Network Programming Project - M1 IoT (2024-2025)
 
+> The screenshots and videos in this README are from early development stages or were captured after returning the Rasptank. As such, they do not fully represent the final capabilities of the project. They are included to give a general idea of the project’s concept, rather than showcasing its full potential.
+
 ## Overview
 
 This project aims to program a small robot to participate in the *World of Rasptank* game. It is fully developed in Python and is part of the Network Programming course delivered by Alexis Delplace (@AlexisDel)
@@ -54,6 +56,8 @@ We have successfully completed the project, and our robot is fully functional. W
 
 (*): The webcam streaming wasn't required but recommended. We did it to enhance our experience and for fun.
 
+[![Rasptank Early In-Development Movement Video](https://img.youtube.com/vi/EKCg1bY0kG4/0.jpg)](https://youtu.be/EKCg1bY0kG4)
+
 #### Controller (a.k.a Dashboard in our case)
 
 We had complete freedom in designing the controller, but it had to allow at least:
@@ -67,8 +71,16 @@ We chose to create a graphical interface using `pygame`, which runs on a separat
 - [x] Displaying the webcam stream directly in the interface
 - [x] Displaying the Rasptank-related information (battery level, speed, etc.)
 - [x] Displaying the DualSense controller information (connection status, feedback status, etc.)
-- [x] Displaying in-game information (flag status, capture zone status, etc.)
-- [x] Displaying the game status (game in progress, game over, etc.)
+
+<p align="center">
+  <img src="resources/images/dashboard.jpeg" width="600px">
+</p>
+
+We also added a shutting down animation for the dashboard when the user closes it.
+
+<p align="center">
+  <img src="resources/images/shutting_animation.jpeg" width="600px">
+</p>
 
 #### Rasptank <-> Dashboard Communication
 
@@ -80,8 +92,24 @@ The camera stream is sent via a WebSocket connection, which is more efficient fo
 
 We also had to use the MQTT protocol to communicate with the game server. The game server sends the game state and receives the Rasptank's status.
 
-### Additional Gimmicks We Implemented
+### Additional Features We Implemented For Fun
 
+#### Developer Experience
+
+<p align="center">
+  <img src="resources/images/enhanced_logger.jpeg" width="600px">
+</p>
+
+- [x] A well-structured codebase with a clear architecture and separation of concerns.
+- [x] Enhanced and extensive logging system for debugging and monitoring.
+- [x] Well-formatted and linted code using `black`, `isort`, and `flake8`.
+- [x] Pre-commit hooks for automatic code formatting and linting.
+
+#### Game Server Enhancements
+
+- [x] Local broker for all MQTT communication easily executable using `python3 src/broker/broker_main.py`.
+
+#### Player Experience
 - [x] A battery level indicator on the dashboard for the Rasptank.
 - [x] DualSense controller feedback (vibration) and light bar color change when:
   - the Rasptank is hit
