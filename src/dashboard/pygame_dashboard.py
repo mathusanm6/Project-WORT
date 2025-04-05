@@ -1081,9 +1081,10 @@ class RasptankPygameDashboard:
             ("D-Pad", "Moving 4 directions"),
             ("L1 / R1", "Increase / Decrease Speed"),
             ("L2 / R2", "Moving Forward / Backward"),
-            ("Left Stick", "Moving with CURVE turn"),
+            ("Left Stick", "Moving with Curve turn if thrusting"),
             ("Square", "Shoot Enemy"),
             ("Triangle", "Switch between Spin / Pivot turning"),
+            ("Circle", "Scan QR Code"),
         ]
 
         # Column width
