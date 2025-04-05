@@ -53,7 +53,7 @@ InfraLib.IRBlast(uuid.getnode(), "LASER")
     GPIO.setmode(GPIO.BOARD)
     IR_RECEIVER = 15
     GPIO.setup(IR_RECEIVER, GPIO.IN)
-        
+
     while True:
         received = InfraLib.getSignal(IR_RECEIVER)
         print(received)

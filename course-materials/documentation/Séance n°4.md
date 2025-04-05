@@ -19,13 +19,13 @@ MJPEG, pour Motion JPEG, consiste à prendre des photos et à les envoyer les un
 
 - En compressant nos images JPEG à une qualité de 50% (compression nettement visible), on peut réduire la taille moyenne de nos images à 32 KB. Un stream à 30 fps consommerait alors 32 x 30 x 8 = 7.6 Mbps.
 
-7.6 Mbps pour de la 480p est considérable. Pour comparaison, une vidéo YouTube en 1080p consomme environ 5 Mbps, alors qu'une image en 1080p contient 6.75 fois plus de pixels qu'une en 480p. 
+7.6 Mbps pour de la 480p est considérable. Pour comparaison, une vidéo YouTube en 1080p consomme environ 5 Mbps, alors qu'une image en 1080p contient 6.75 fois plus de pixels qu'une en 480p.
 
 Cette solution n'est donc pas viable. Avec plusieurs robots, on saturerait rapidement la bande passante du routeur (entre 72 et 150 Mbps). De plus, une forte charge sur le réseau créerait de la latence, ce que nous souhaitons éviter. Notre projet devant être scalable, une autre solution doit être trouvée.
 
 2. **Codec Vidéo**
 
-La solution est d'utiliser un codec vidéo pour la compression. C'est grâce à ce type de codec qu'une vidéo YouTube en 1080p ne consomme "que" 5 Mbps. Un codec vidéo est un dispositif (matériel ou logiciel) qui encode et décode de la vidéo selon une norme spécifique (codec vient de **coder-decoder**). Par exemple, **H264** est une norme vidéo et **x264** est un codec (logiciel) capable d'encoder ou de décoder un flux vidéo dans le format décrit par la norme H264. Nous utiliserons notamment libav, un autre codec H264. 
+La solution est d'utiliser un codec vidéo pour la compression. C'est grâce à ce type de codec qu'une vidéo YouTube en 1080p ne consomme "que" 5 Mbps. Un codec vidéo est un dispositif (matériel ou logiciel) qui encode et décode de la vidéo selon une norme spécifique (codec vient de **coder-decoder**). Par exemple, **H264** est une norme vidéo et **x264** est un codec (logiciel) capable d'encoder ou de décoder un flux vidéo dans le format décrit par la norme H264. Nous utiliserons notamment libav, un autre codec H264.
 
 ###### Problème de Ressources ?
 
@@ -47,7 +47,7 @@ Cette technique réduit considérablement la bande passante si l'image ne change
 
 ## Implémentation
 
-Si vous souhaitez implémenter le streaming mais que vous ne vous sentez pas à l'aise avec le codec (voir la suite du tutoriel), vous pouvez opter pour la première méthode. Les tutoriels disponibles sur Internet utilisent cette méthode. 
+Si vous souhaitez implémenter le streaming mais que vous ne vous sentez pas à l'aise avec le codec (voir la suite du tutoriel), vous pouvez opter pour la première méthode. Les tutoriels disponibles sur Internet utilisent cette méthode.
 :warning: Si vous choisissez cette option, assurez-vous de pouvoir activer ou couper le stream.
 
 Vous pouvez également le faire "correctement" en suivant le tutoriel ci-dessous.
@@ -312,7 +312,7 @@ Le problème avec cette méthode est que le streaming ne s'arrête pas lorsque l
 Importer GStreamer :
 
 ```python
-import gi 
+import gi
 gi.require_version('Gst', '1.0')
 from gi.repository import Gst, GLib
 ```
