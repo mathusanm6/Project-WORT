@@ -13,27 +13,27 @@
 
 - Téléchargez [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
 - Flashez la carte SD :
-    - Choose Device : Raspberry Pi 4  
+    - Choose Device : Raspberry Pi 4
     ![Raspberry Pi Imager](/documentation/images/choose_device.png)
-    - Choose OS : Raspberry Pi OS (Legacy, 32-bit)  
+    - Choose OS : Raspberry Pi OS (Legacy, 32-bit)
     ![Raspberry Pi Imager](/documentation/images/choose_os.png)
-    - Choose Storage :  
+    - Choose Storage :
     ![Raspberry Pi Imager](/documentation/images/choose_storage.png)
     - Ensuite, cliquez sur *Next* :
         - Would you like to apply OS customization settings? : No
         - All existing data on '...' will be erased? : Yes
 
-- Insérez la carte SD dans le Raspberry Pi  
+- Insérez la carte SD dans le Raspberry Pi
 ![](images/sd_slot.png)
 
 :white_check_mark: Vous pouvez maintenant allumer le Raspberry Pi en branchant l'alimentation et le câble HDMI.
 
 ## 2. Configuration du Raspberry Pi
 
-- Ouvrez la configuration du Raspberry Pi  
+- Ouvrez la configuration du Raspberry Pi
 ![](images/select_rpi_config.png)
 
-- Activez l'I2C et le SSH  
+- Activez l'I2C et le SSH
 ![](images/rpi_config.png)
 
 :white_check_mark: Vous pouvez maintenant redémarrer le Raspberry Pi

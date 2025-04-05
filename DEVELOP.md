@@ -1,4 +1,5 @@
-# Development
+# This file contains instructions for developers who want to contribute to the project.
+# It includes information on how to set up the development environment, run tests, and format code.
 
 ## Install pyenv and download Python 3.11.2
 

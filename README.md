@@ -1,63 +1,83 @@
-# Projet Programmation Réseau M1 IoT
+# Network Programming Project - M1 IoT (2024-2025)
 
-## Présentation
+## Overview
 
-Ce projet a pour objectif de programmer un petit robot pour participer au jeu *World of Rasptank*.
+This project aims to program a small robot to participate in the *World of Rasptank* game.
 
 ### *World of Rasptank*
 
 <p align="center">
-  <img src="documentation/images/world_of_rasptank.png">
+  <img src="resources/images/world_of_rasptank.jpeg" alt="World of Rasptank (AI GENERATED)" width="860px">
+  <legend>World of Rasptank</legend>
 </p>
 
-Ce jeu implique deux équipes: une équipe bleue et une équipe rouge. Les participants sont répartis équitablement entre ces deux équipes. Chaque équipe dispose d'une base. Le but est de capturer le drapeau placé au centre du terrain et de le rapporter à sa base.
+This game involves two teams: a blue team and a red team. Participants are evenly split between the two teams. Each team has a base. The objective is to capture the flag placed in the center of the field and bring it back to your base.
 
-Pour capturer le drapeau, il faut rester 5 secondes dans la zone de capture.
+To capture the flag, you must stay in the capture zone for 5 seconds.
 
-:warning: **Attention**:
+:warning: **Important**:
 
-- Si vous portez le drapeau et que vous êtes touché, vous le perdez. Le drapeau retourne alors automatiquement à la zone de capture.
-- Si vous êtes touché pendant la capture du drapeau, celle-ci est annulée. Vous devrez sortir de la zone puis y re-entrer pour recommencer la capture.
+- If you are carrying the flag and get hit, you drop it. The flag then automatically returns to the capture zone.
+- If you are hit while capturing the flag, the capture is canceled. You must leave the zone and re-enter it to restart the capture process.
 
-Pour déposer le drapeau dans votre base, scannez le QR code présent dans celle-ci. Une équipe gagne la partie en rapportant trois drapeaux dans son camp.
+To deposit the flag in your base, scan the QR code located there. A team wins the game by bringing three flags back to their base.
 
-## Consignes
+## Context
 
-Vous travaillerez en binôme ou trinôme et disposerez d'un "Rasptank", un petit robot chenillé piloté via un Raspberry Pi.
+We had to work in trios and had been provided with a “Rasptank”, a small tracked robot controlled via a Raspberry Pi.
 
-![Rasptank](documentation/images/rasptank.png)
+<p align="center">
+  <img src="resources/images/rasptank.png" width="400px">
+  <legend>Adeept Rasptank</legend>
+</p>
 
-## Objectifs
+## Objectives
 
-L'évaluation finale consistera en une partie de *World of Rasptank*. Il est donc essentiel d'avoir un robot opérationnel pour la dernière séance. Voici les fonctionnalités à implémenter pour que votre robot puisse participer:
+The final evaluation will take the form of a World of Rasptank match. Therefore, it is essential to have a fully operational robot by the end of the course.
+
+## Our Achievements
+
+We have successfully completed the project, and our robot is fully functional. We have implemented all the required features and even added some additional functionalities.
 
 #### Rasptank
 
-- Contrôle à distance.
-- Déplacement dans toutes les directions.
-- Tir via un émetteur infrarouge.
-- Réception de tirs par un récepteur infrarouge entraînant l'immobilisation du tank pendant une durée de 2 secondes et le clignotement des LEDs en orange.
-- Détection de l'entrée dans la zone de capture (zone blanche) grâce au module suiveur de ligne.
-- Streaming en temps réel du flux vidéo de la webcam*.
+- [x] Remotely controllable
+- [x] Movement in all directions
+- [x] Three speed modes: slow, medium, and fast
+- [x] Three turning types: curve, spin and pivot
+- [x] Shooting via an infrared emitter
+- [x] Detection of hits through an infrared receiver, resulting in tank immobilization for 2 seconds and orange LED blinking.
+- [x] Detection of entry into the capture zone (white area) using the line-following module.
+- [x] Real-time streaming of webcam video feed*.
 
-(*): Non obligatoire, mais recommandé.
+(*): The webcam streaming wasn't required but recommended. We did it to enhance our experience and for fun.
 
-#### Télécommande
+#### Controller (a.k.a Dashboard in our case)
 
-Vous avez carte blanche concernant la télécommande, mais elle doit permettre au moins:
+We had complete freedom in designing the controller, but it had to allow at least:
 
-- L'envoi de commandes au Rasptank (déplacements, tirs, etc.).
-- La visualisation du stream de la webcam.
+- Sending commands to the Rasptank (movements, shots, etc.).
+- Viewing the webcam stream.
 
-![](documentation/images/controller_tk.gif)
+<p align="center">
+  <img src="course-materials/documentation/images/controller_tk.gif" width="400px">
+  <legend>A basic example of the controller</legend>
+</p>
 
-### Documentation
+We chose to create a graphical interface using `pygame`, which runs on a separate computer and connects to a PS5 DualSense controller either via Bluetooth or a wired connection.
 
-Sur le Git, vous trouverez des guides pour chaque partie du projet, offrant des explications sur le code fourni et des suggestions pour développer les fonctionnalités requises.
+- [x] Sending commands to the Rasptank
+- [x] Displaying the webcam stream directly in the interface
+- [x] Displaying the Rasptank-related information (battery level, speed, etc.)
+- [x] Displaying the DualSense controller information (connection status, feedback status, etc.)
+- [x] Displaying in-game information (flag status, capture zone status, etc.)
+- [x] Displaying the game status (game in progress, game over, etc.)
 
-Toutes les approches présentées sont viables. Vous avez la liberté de choisir celle qui vous semble la plus appropriée, ou même d'adopter une méthode non décrite dans le guide.
 
-Les choix d'implémentation que je recommande sont signalés par une étoile :star:. Si vous ne privilégiez pas une méthode en particulier, suivre ces recommandations peut être une bonne option.
+## Contributors
 
-### Pour participer au développement du projet
-Voir le fichier [DEVELOP.md](DEVELOP.md)
+| First Name | Last Name  | GitHub ID   |
+| ---------- | ---------- | ----------- |
+| Jewin      | CHENG      | @jewinc     |
+| Elie       | KANGA      | @Kg-elie    |
+| Mathusan   | SELVAKUMAR | @mathusanm6 |
