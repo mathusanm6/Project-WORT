@@ -2,7 +2,8 @@
 
 ## Overview
 
-This project aims to program a small robot to participate in the *World of Rasptank* game.
+This project aims to program a small robot to participate in the *World of Rasptank* game. It is fully developed in Python and is part of the Network Programming course delivered by Alexis Delplace (@AlexisDel)
+at the Université Paris-Saclay.
 
 ### *World of Rasptank*
 
@@ -28,16 +29,17 @@ We had to work in trios and had been provided with a “Rasptank”, a small tra
 
 <p align="center">
   <img src="resources/images/rasptank.png" width="400px">
-  <legend>Adeept Rasptank</legend>
 </p>
 
 ## Objectives
 
-The final evaluation will take the form of a World of Rasptank match. Therefore, it is essential to have a fully operational robot by the end of the course.
+The idea for the final evaluation was to participate in a World of Rasptank match. Therefore, it was essential to have a fully operational robot by the end of the course.
 
 ## Our Achievements
 
 We have successfully completed the project, and our robot is fully functional. We have implemented all the required features and even added some additional functionalities.
+
+### Important Features
 
 #### Rasptank
 
@@ -59,11 +61,6 @@ We had complete freedom in designing the controller, but it had to allow at leas
 - Sending commands to the Rasptank (movements, shots, etc.).
 - Viewing the webcam stream.
 
-<p align="center">
-  <img src="course-materials/documentation/images/controller_tk.gif" width="400px">
-  <legend>A basic example of the controller</legend>
-</p>
-
 We chose to create a graphical interface using `pygame`, which runs on a separate computer and connects to a PS5 DualSense controller either via Bluetooth or a wired connection.
 
 - [x] Sending commands to the Rasptank
@@ -73,6 +70,26 @@ We chose to create a graphical interface using `pygame`, which runs on a separat
 - [x] Displaying in-game information (flag status, capture zone status, etc.)
 - [x] Displaying the game status (game in progress, game over, etc.)
 
+#### Rasptank <-> Dashboard Communication
+
+We had to implement a communication system between the Rasptank and the dashboard. We chose to use the MQTT protocol, which is lightweight and well-suited for IoT applications.
+
+The camera stream is sent via a WebSocket connection, which is more efficient for video streaming. The `pygame` interface gets the stream through HTTP requests and displays it in the dashboard.
+
+#### Rasptank <-> Game Server Communication
+
+We also had to use the MQTT protocol to communicate with the game server. The game server sends the game state and receives the Rasptank's status.
+
+### Additional Gimmicks We Implemented
+
+- [x] A battery level indicator on the dashboard for the Rasptank.
+- [x] DualSense controller feedback (vibration) and light bar color change when:
+  - The Rasptank is hit
+  - The Rasptank is in the capture zone
+  - The Rasptank is carrying the flag
+  - The Rasptank moves based on the speed mode and turn type
+- [x] Fine-tuned the rumble effect of the DualSense controller to match the Rasptank's movement and overall experience.
+- [x] QR code scanning on command using `O Button` using the controller.
 
 ## Contributors
 
