@@ -1,5 +1,7 @@
 # Project WORT - World of Rasptank
 
+[![Python Code Quality](https://github.com/mathusanm6/Project-WORT/actions/workflows/python-code-quality.yml/badge.svg)](https://github.com/mathusanm6/Project-WORT/actions/workflows/python-code-quality.yml)
+
 > :warning: **Note:** The screenshots and videos in this README are from early development stages or were captured after returning the Rasptank. As such, they do not fully represent the final capabilities of the project. They are included to give a general idea of the project’s concept, rather than showcasing its full potential.
 
 ## 📚 Table of Contents
