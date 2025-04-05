@@ -95,13 +95,13 @@ We chose to create a graphical interface using `pygame`, which runs on a separat
 - [x] Displaying the DualSense controller information (connection status, feedback status, etc.)
 
 <p align="center">
-  <img src="resources/images/dashboard.jpeg" width="600px">
+  <img src="resources/images/dashboard.png" width="600px">
 </p>
 
 We also added a shutting down animation for the dashboard when the user closes it.
 
 <p align="center">
-  <img src="resources/images/shutting_animation.jpeg" width="600px">
+  <img src="resources/images/shutting_animation.png" width="600px">
 </p>
 
 #### Rasptank <-> Dashboard Communication
@@ -119,7 +119,7 @@ We also had to use the MQTT protocol to communicate with the game server. The ga
 #### Developer Experience
 
 <p align="center">
-  <img src="resources/images/enhanced_logger.jpeg" width="600px">
+  <img src="resources/images/enhanced_logger.png" width="600px">
 </p>
 
 - [x] A well-structured codebase with a clear architecture and separation of concerns.
